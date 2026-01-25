@@ -1,263 +1,287 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Finance Tracker ZAR</title>
-    <script src="https://cdn.jsdelivr.net/npm/tesseract.js@4/dist/tesseract.min.js"></script>
-    <style>
-        :root { --in: #16a34a; --out: #dc2626; --accent: #2563eb; --bg: #f8fafc; --text: #1e293b; --warn: #f59e0b; }
-        body { font-family: -apple-system, sans-serif; background: var(--bg); color: var(--text); padding: 15px; margin: 0; padding-top: 80px; }
-        .search-header { position: fixed; top: 0; left: 0; right: 0; background: white; padding: 15px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); z-index: 100; }
-        .card { background: white; padding: 20px; border-radius: 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); margin-bottom: 20px; }
-        .backup-alert { background: var(--warn); color: white; padding: 10px; border-radius: 8px; margin-bottom: 15px; text-align: center; font-weight: bold; display: none; }
-        .flex-row { display: flex; gap: 10px; margin-bottom: 15px; }
-        .form-group { margin-bottom: 15px; }
-        label { display: block; font-size: 11px; color: #64748b; text-transform: uppercase; font-weight: 700; margin-bottom: 4px; }
-        select, input { width: 100%; padding: 12px; border: 1px solid #e2e8f0; border-radius: 10px; font-size: 16px; box-sizing: border-box; }
-        .tab-group { display: flex; background: #f1f5f9; padding: 4px; border-radius: 12px; margin-bottom: 20px; }
-        .tab-btn { flex: 1; padding: 10px; border: none; border-radius: 8px; cursor: pointer; font-weight: 600; color: #64748b; }
-        .tab-btn.active-in { background: var(--in); color: white; }
-        .tab-btn.active-out { background: var(--out); color: white; }
-        .btn-process { width: 100%; padding: 16px; background: var(--accent); color: white; border: none; border-radius: 12px; font-size: 16px; font-weight: 700; cursor: pointer; }
-        .btn-sm { padding: 8px; font-size: 12px; border-radius: 6px; border: 1px solid #cbd5e1; cursor: pointer; background: white; flex: 1; text-align: center; }
-        .summary-line { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #f1f5f9; }
-        .hidden { display: none; }
-        #ocrStatus { font-size: 12px; color: var(--accent); margin-top: 5px; font-weight: bold; }
-        table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 10px; }
-        td { padding: 10px 0; border-top: 1px solid #f1f5f9; }
-        .del-icon { color: #cbd5e1; cursor: pointer; padding: 5px; font-size: 16px; text-align: right; }
-    </style>
-</head>
-<body>
+import React, { useState, useEffect, useRef } from 'react';
+import { initializeApp } from 'firebase/app';
+import { 
+  getAuth, 
+  signInWithCustomToken, 
+  signInAnonymously, 
+  onAuthStateChanged 
+} from 'firebase/auth';
+import { 
+  getFirestore, 
+  collection, 
+  doc, 
+  addDoc, 
+  deleteDoc, 
+  onSnapshot
+} from 'firebase/firestore';
+import { 
+  Camera, 
+  History, 
+  PlusCircle, 
+  Trash2, 
+  PieChart, 
+  Banknote, 
+  X,
+  Smartphone,
+  ArrowDown,
+  ChevronRight
+} from 'lucide-react';
 
-<div class="search-header">
-    <input type="text" id="searchInput" placeholder="🔍 Search Supplier/Category..." onkeyup="renderApp()">
-</div>
+const firebaseConfig = JSON.parse(__firebase_config);
+const app = initializeApp(firebaseConfig);
+const auth = getAuth(app);
+const db = getFirestore(app);
+const appId = typeof __app_id !== 'undefined' ? __app_id : 'pro-log-business-zar';
+const apiKey = ""; 
 
-<div id="backupReminder" class="backup-alert">⚠️ Weekly Backup Due!</div>
+export default function App() {
+  const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState('entry');
+  const [records, setRecords] = useState([]);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [pendingImage, setPendingImage] = useState(null);
+  const [entryType, setEntryType] = useState('income'); 
+  const cameraInputRef = useRef(null);
 
-<div class="card">
-    <label>Current View</label>
-    <div class="flex-row">
-        <select id="viewMonth" onchange="renderApp()"></select>
-        <select id="viewYear" onchange="renderApp()"><option>2025</option><option selected>2026</option></select>
-    </div>
-</div>
+  const [formData, setFormData] = useState({
+    amount: '0', 
+    yokoAmount: '0', 
+    cashAmount: '0', 
+    date: new Date().toISOString().split('T')[0],
+    supplier: '',
+    category: 'Sales',
+    notes: ''
+  });
 
-<div class="card">
-    <div class="tab-group">
-        <button id="tabIn" class="tab-btn active-in" onclick="setEntryMode('in')">Money In</button>
-        <button id="tabOut" class="tab-btn" onclick="setEntryMode('out')">Money Out</button>
-    </div>
-    <div class="form-group"><label>Day</label><select id="entryDay"></select></div>
-    <div class="form-group"><label>Total Amount (R)</label><input type="number" id="entryAmount" step="0.01" placeholder="0.00"></div>
-    <div class="form-group">
-        <label>Scan Receipt/Invoice</label>
-        <input type="file" id="cameraInput" accept="image/*">
-        <div id="ocrStatus"></div>
-    </div>
-    <div id="outOnlyFields" class="hidden">
-        <div class="form-group"><label>Category</label><select id="entryCategory"></select></div>
-        <div class="form-group"><label>Supplier</label><select id="entrySupplier"></select></div>
-    </div>
-    <button class="btn-process" onclick="processEntry()">PROCESS DATA</button>
-</div>
+  const calculatedTotal = entryType === 'income' 
+    ? (parseFloat(formData.yokoAmount || 0) + parseFloat(formData.cashAmount || 0)).toFixed(2)
+    : parseFloat(formData.amount || 0).toFixed(2);
 
-<div class="card">
-    <h3>Monthly Summary</h3>
-    <div id="monthSummaryUI"></div>
-</div>
-
-<div class="card">
-    <h3>Yearly Supplier Spending</h3>
-    <div id="yearSupplierUI"></div>
-</div>
-
-<div class="card">
-    <h3 id="historyTitle">Recent History</h3>
-    <table>
-        <thead><tr><th align="left">Date</th><th align="left">Info</th><th align="left">Amount</th><th></th></tr></thead>
-        <tbody id="historyBody"></tbody>
-    </table>
-</div>
-
-<div class="card">
-    <h3>Backup & Export</h3>
-    <div class="flex-row">
-        <button class="btn-sm" onclick="exportBackup()">💾 Backup</button>
-        <button class="btn-sm" onclick="exportCSV()">📊 CSV</button>
-    </div>
-    <div class="flex-row">
-        <label class="btn-sm">📂 Restore<input type="file" class="hidden" onchange="importBackup(event)"></label>
-    </div>
-</div>
-
-<div class="card">
-    <h3>Manage Menus</h3>
-    <div class="form-group">
-        <label>Add Category</label>
-        <div class="flex-row"><input type="text" id="newCatName"><button class="btn-sm" onclick="addItem('cats', 'newCatName')">Add</button></div>
-        <div id="listCats"></div>
-    </div>
-    <div class="form-group">
-        <label>Add Supplier</label>
-        <div class="flex-row"><input type="text" id="newSupName"><button class="btn-sm" onclick="addItem('sups', 'newSupName')">Add</button></div>
-        <div id="listSups"></div>
-    </div>
-</div>
-
-<script>
-    let mode = 'in';
-    let records = JSON.parse(localStorage.getItem('f_data')) || [];
-    let cats = JSON.parse(localStorage.getItem('f_cats')) || ['Salary', 'Groceries', 'Rent', 'Petrol'];
-    let sups = JSON.parse(localStorage.getItem('f_sups')) || ['Employer', 'Checkers', 'Woolworths', 'Shell'];
-    let lastBackup = localStorage.getItem('f_last_backup') || Date.now();
-
-    const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
-    const mSel = document.getElementById('viewMonth');
-    months.forEach((m, i) => mSel.innerHTML += `<option value="${i}">${m}</option>`);
-    mSel.value = new Date().getMonth();
-
-    for(let i=1; i<=31; i++) document.getElementById('entryDay').innerHTML += `<option value="${i}">${i}</option>`;
-    document.getElementById('entryDay').value = new Date().getDate();
-
-    function setEntryMode(m) {
-        mode = m;
-        document.getElementById('tabIn').className = m === 'in' ? 'tab-btn active-in' : 'tab-btn';
-        document.getElementById('tabOut').className = m === 'out' ? 'tab-btn active-out' : 'tab-btn';
-        document.getElementById('outOnlyFields').classList.toggle('hidden', m === 'in');
-    }
-
-    function processEntry() {
-        const amtInput = document.getElementById('entryAmount');
-        const amt = parseFloat(amtInput.value);
-        if(!amt) { alert("Please enter an amount"); return; }
-        
-        records.push({
-            id: Date.now(),
-            type: mode, 
-            month: mSel.value, 
-            year: document.getElementById('viewYear').value,
-            day: document.getElementById('entryDay').value, 
-            amount: amt,
-            category: mode === 'out' ? document.getElementById('entryCategory').value : 'Income',
-            supplier: mode === 'out' ? document.getElementById('entrySupplier').value : 'N/A',
-            timestamp: Date.now()
-        });
-        
-        localStorage.setItem('f_data', JSON.stringify(records));
-        amtInput.value = '';
-        document.getElementById('ocrStatus').innerText = '';
-        renderApp();
-        alert("Transaction Recorded!");
-    }
-
-    function deleteRecord(id) {
-        if(confirm("Delete this transaction?")) {
-            records = records.filter(r => r.id !== id);
-            localStorage.setItem('f_data', JSON.stringify(records));
-            renderApp();
-        }
-    }
-
-    function addItem(t, id) {
-        let v = document.getElementById(id).value.trim();
-        if(!v) return;
-        if(t === 'cats') cats.push(v); else sups.push(v);
-        localStorage.setItem('f_cats', JSON.stringify(cats));
-        localStorage.setItem('f_sups', JSON.stringify(sups));
-        document.getElementById(id).value = '';
-        renderApp();
-    }
-
-    function renderApp() {
-        document.getElementById('entryCategory').innerHTML = cats.map(c => `<option>${c}</option>`).join('');
-        document.getElementById('entrySupplier').innerHTML = sups.map(s => `<option>${s}</option>`).join('');
-        document.getElementById('listCats').innerHTML = cats.map(c => `<small style="background:#eee;padding:2px 5px;margin:2px;border-radius:4px;display:inline-block">${c}</small>`).join('');
-        document.getElementById('listSups').innerHTML = sups.map(s => `<small style="background:#eee;padding:2px 5px;margin:2px;border-radius:4px;display:inline-block">${s}</small>`).join('');
-
-        const m = mSel.value, y = document.getElementById('viewYear').value;
-        const q = document.getElementById('searchInput').value.toLowerCase();
-        
-        const filtered = records.filter(r => r.month == m && r.year == y);
-        const tin = filtered.filter(r => r.type == 'in').reduce((s, r) => s + r.amount, 0);
-        const tout = filtered.filter(r => r.type == 'out').reduce((s, r) => s + r.amount, 0);
-        document.getElementById('monthSummaryUI').innerHTML = `
-            <div class="summary-line"><span>Money In:</span><b style="color:var(--in)">R${tin.toFixed(2)}</b></div>
-            <div class="summary-line"><span>Money Out:</span><b style="color:var(--out)">R${tout.toFixed(2)}</b></div>
-        `;
-        
-        let displayList = [];
-        if(q) {
-            document.getElementById('historyTitle').innerText = "Search Results";
-            displayList = records.filter(r => r.supplier.toLowerCase().includes(q) || r.category.toLowerCase().includes(q));
+  useEffect(() => {
+    const initAuth = async () => {
+      try {
+        if (typeof __initial_auth_token !== 'undefined' && __initial_auth_token) {
+          await signInWithCustomToken(auth, __initial_auth_token);
         } else {
-            document.getElementById('historyTitle').innerText = "Recent History";
-            displayList = [...records].sort((a,b) => b.timestamp - a.timestamp).slice(0, 5);
+          await signInAnonymously(auth);
         }
-
-        document.getElementById('historyBody').innerHTML = displayList.map(r => `
-            <tr>
-                <td>${r.day} ${months[r.month]}</td>
-                <td>${r.supplier !== 'N/A' ? r.supplier : r.category}</td>
-                <td style="color:${r.type=='in'?'var(--in)':'var(--out)'}">R${r.amount.toFixed(2)}</td>
-                <td class="del-icon" onclick="deleteRecord(${r.id})">🗑️</td>
-            </tr>
-        `).join('');
-
-        const yrOut = records.filter(r => r.year == y && r.type == 'out');
-        const sTot = {}; yrOut.forEach(r => sTot[r.supplier] = (sTot[r.supplier] || 0) + r.amount);
-        let sHtml = ""; for(let s in sTot) sHtml += `<div class="summary-line"><span>${s}</span><b>R${sTot[s].toFixed(2)}</b></div>`;
-        document.getElementById('yearSupplierUI').innerHTML = sHtml || "No data.";
-
-        checkBackupReminder();
-    }
-
-    function checkBackupReminder() {
-        const week = 7 * 24 * 60 * 60 * 1000;
-        document.getElementById('backupReminder').style.display = (Date.now() - lastBackup > week) ? 'block' : 'none';
-    }
-
-    function exportBackup() {
-        const blob = new Blob([JSON.stringify({records, cats, sups})], {type: 'application/json'});
-        const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'finance_backup.json'; a.click();
-        lastBackup = Date.now(); localStorage.setItem('f_last_backup', lastBackup); renderApp();
-    }
-
-    function exportCSV() {
-        let csv = "Date,Type,Amount,Category,Supplier\n";
-        records.forEach(r => { csv += `${r.day}/${parseInt(r.month)+1}/${r.year},${r.type},${r.amount},${r.category},${r.supplier}\n`; });
-        const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv], {type: 'text/csv'})); a.download = 'finance_export.csv'; a.click();
-    }
-
-    function importBackup(e) {
-        const reader = new FileReader();
-        reader.onload = (event) => {
-            const d = JSON.parse(event.target.result);
-            records = d.records; cats = d.cats; sups = d.sups;
-            localStorage.setItem('f_data', JSON.stringify(records)); localStorage.setItem('f_cats', JSON.stringify(cats)); localStorage.setItem('f_sups', JSON.stringify(sups));
-            location.reload();
-        };
-        reader.readAsText(e.target.files[0]);
-    }
-
-    document.getElementById('cameraInput').onchange = (e) => {
-        const status = document.getElementById('ocrStatus');
-        status.innerText = "Scanning... please wait.";
-        Tesseract.recognize(e.target.files[0], 'eng').then(({data:{text}}) => {
-            const m = text.match(/\d+\.\d{2}/g);
-            if(m) {
-                const found = Math.max(...m.map(Number));
-                document.getElementById('entryAmount').value = found;
-                status.innerText = "Found: R" + found;
-            } else {
-                status.innerText = "Not found. Enter manually.";
-            }
-        });
+      } catch (err) { console.error(err); }
     };
+    initAuth();
+    const unsubscribe = onAuthStateChanged(auth, (u) => {
+      setUser(u);
+      setLoading(false);
+    });
+    return () => unsubscribe();
+  }, []);
 
-    renderApp();
-</script>
-</body>
-</html>
+  useEffect(() => {
+    if (!user) return;
+    const unsubRecords = onSnapshot(collection(db, 'artifacts', appId, 'public', 'data', 'entries'), (snap) => {
+      setRecords(snap.docs.map(d => ({ id: d.id, ...d.data() })).sort((a, b) => new Date(b.date) - new Date(a.date)));
+    }, (err) => console.error(err));
+    return () => unsubRecords();
+  }, [user]);
+
+  const handleImageSelect = (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (ev) => {
+        setPendingImage(ev.target.result);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const processImage = async () => {
+    if (!pendingImage) return;
+    setIsProcessing(true);
+    
+    const systemPrompt = `Extract data from business document image.
+    RULES:
+    1. Check if it's a "Daily Sales" paper slip or an "Expense" invoice.
+    2. If DAILY SALES: 
+       - Find the number written immediately to the right of the word "Yoko".
+       - Find the number at the bottom that has an arrow drawn underneath it; this is the Grand Total.
+       - Set type="income".
+    3. If INVOICE/EXPENSE:
+       - Find the business name at the top.
+       - Find the total amount.
+       - Set type="expense".
+    
+    Return JSON ONLY: {
+      "type": "income" | "expense", 
+      "supplierName": "string", 
+      "yokoAmount": number, 
+      "totalAmount": number, 
+      "date": "YYYY-MM-DD", 
+      "category": "string"
+    }`;
+    
+    try {
+      const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-09-2025:generateContent?key=${apiKey}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{
+            role: "user",
+            parts: [{ text: "Process this slip." }, { inlineData: { mimeType: "image/jpeg", data: pendingImage.split(',')[1] } }]
+          }],
+          systemInstruction: { parts: [{ text: systemPrompt }] },
+          generationConfig: { responseMimeType: "application/json" }
+        })
+      });
+
+      const result = await response.json();
+      const ex = JSON.parse(result.candidates[0].content.parts[0].text);
+      
+      setEntryType(ex.type);
+      setFormData({
+        amount: ex.type === 'expense' ? ex.totalAmount?.toString() : '0',
+        yokoAmount: ex.yokoAmount?.toString() || '0',
+        cashAmount: ex.type === 'income' ? (ex.totalAmount - (ex.yokoAmount || 0)).toString() : '0',
+        date: ex.date || new Date().toISOString().split('T')[0],
+        supplier: ex.supplierName || (ex.type === 'income' ? 'Daily Sales' : ''),
+        category: ex.category || (ex.type === 'income' ? 'Sales' : 'Stock'),
+        notes: ''
+      });
+      setPendingImage(null);
+    } catch (err) { 
+      console.error(err);
+    } finally { setIsProcessing(false); }
+  };
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    await addDoc(collection(db, 'artifacts', appId, 'public', 'data', 'entries'), { 
+      ...formData, 
+      totalAmount: calculatedTotal,
+      type: entryType, 
+      createdAt: new Date().toISOString() 
+    });
+    setFormData({ amount: '0', cashAmount: '0', yokoAmount: '0', date: new Date().toISOString().split('T')[0], supplier: '', category: 'Sales', notes: '' });
+    setActiveTab('history');
+  };
+
+  return (
+    <div className="flex flex-col h-screen bg-slate-50 text-slate-900 max-w-md mx-auto shadow-2xl relative font-sans">
+      
+      {pendingImage && (
+        <div className="absolute inset-0 z-[100] bg-slate-950 flex flex-col items-center p-6 text-white">
+          <div className="w-full flex justify-between items-center mb-4">
+             <span className="text-[10px] font-black uppercase text-blue-500 tracking-widest italic">Scanning Ledger...</span>
+             <button onClick={() => setPendingImage(null)} className="p-2 bg-white/10 rounded-full"><X size={20} /></button>
+          </div>
+          <div className="flex-1 w-full bg-black rounded-3xl overflow-hidden border border-white/10 flex items-center justify-center">
+            <img src={pendingImage} className="max-h-full object-contain" />
+          </div>
+          <button 
+            onClick={processImage} 
+            disabled={isProcessing}
+            className="w-full mt-6 p-6 rounded-3xl bg-blue-600 font-black uppercase text-xs tracking-widest shadow-xl flex items-center justify-center gap-3 active:scale-95 transition-transform"
+          >
+            {isProcessing ? "Reading Document..." : "Confirm Extract"}
+          </button>
+        </div>
+      )}
+
+      <div className="bg-white border-b p-5 flex justify-between items-center sticky top-0 z-10">
+        <h1 className="text-xl font-black italic tracking-tighter">PRO-LOG</h1>
+        <button onClick={() => cameraInputRef.current.click()} className="flex items-center gap-2 px-6 py-3 rounded-2xl bg-slate-900 text-white font-black text-[10px] uppercase tracking-widest italic shadow-lg active:scale-95">
+          <Camera size={16}/> Scan
+        </button>
+        <input type="file" ref={cameraInputRef} onChange={handleImageSelect} accept="image/*" capture="environment" className="hidden" />
+      </div>
+
+      <main className="flex-1 overflow-y-auto p-4 pb-32">
+        <div className="flex bg-white p-1 rounded-2xl border border-slate-200 mb-4 shadow-sm">
+          <button onClick={() => setEntryType('income')} className={`flex-1 py-3.5 rounded-xl font-black text-[10px] uppercase transition-all ${entryType === 'income' ? 'bg-green-600 text-white shadow-md' : 'text-slate-400'}`}>Income</button>
+          <button onClick={() => setEntryType('expense')} className={`flex-1 py-3.5 rounded-xl font-black text-[10px] uppercase transition-all ${entryType === 'expense' ? 'bg-red-600 text-white shadow-md' : 'text-slate-400'}`}>Expense</button>
+        </div>
+
+        <form onSubmit={handleSubmit} className="bg-white rounded-[2rem] p-6 shadow-sm border border-slate-100 space-y-5">
+          <div className="space-y-1">
+            <label className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Name / Supplier</label>
+            <input 
+              className="w-full bg-slate-50 p-4 rounded-xl font-bold text-sm"
+              value={formData.supplier}
+              onChange={e => setFormData({...formData, supplier: e.target.value})}
+              placeholder={entryType === 'income' ? 'Daily Sales' : 'e.g. Sasko'}
+            />
+          </div>
+
+          {entryType === 'income' ? (
+            <div className="space-y-4">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="bg-blue-50 p-4 rounded-2xl border border-blue-100">
+                  <label className="text-[9px] font-black text-blue-500 uppercase flex items-center gap-1"><Smartphone size={10}/> Yoko (Next to text)</label>
+                  <div className="flex items-center mt-1">
+                    <span className="text-xs font-bold text-blue-600 mr-1">R</span>
+                    <input type="number" step="0.01" className="bg-transparent border-none p-0 font-black text-xl text-blue-900 w-full focus:ring-0" 
+                      value={formData.yokoAmount} onChange={e=>setFormData({...formData, yokoAmount: e.target.value})} />
+                  </div>
+                </div>
+                <div className="bg-green-50 p-4 rounded-2xl border border-green-100">
+                  <label className="text-[9px] font-black text-green-500 uppercase flex items-center gap-1"><ArrowDown size={10}/> Cash (Total - Yoko)</label>
+                  <div className="flex items-center mt-1">
+                    <span className="text-xs font-bold text-green-600 mr-1">R</span>
+                    <input type="number" step="0.01" className="bg-transparent border-none p-0 font-black text-xl text-green-900 w-full focus:ring-0" 
+                      value={formData.cashAmount} onChange={e=>setFormData({...formData, cashAmount: e.target.value})} />
+                  </div>
+                </div>
+              </div>
+              
+              <div className="bg-slate-900 p-4 rounded-2xl flex justify-between items-center shadow-inner">
+                <div className="flex items-center gap-2">
+                  <label className="text-[10px] font-black text-slate-400 uppercase tracking-widest underline decoration-blue-500/50">Grand Total (Arrow)</label>
+                </div>
+                <p className="text-white font-black text-2xl tracking-tighter">R{calculatedTotal}</p>
+              </div>
+            </div>
+          ) : (
+            <div className="bg-red-50 p-4 rounded-2xl border border-red-100">
+              <label className="text-[9px] font-black text-red-500 uppercase">Invoice Total</label>
+              <div className="flex items-center mt-1">
+                <span className="text-xs font-bold text-red-600 mr-1">R</span>
+                <input type="number" step="0.01" className="bg-transparent border-none p-0 font-black text-2xl text-red-900 w-full focus:ring-0" 
+                  value={formData.amount} onChange={e=>setFormData({...formData, amount: e.target.value})} />
+              </div>
+            </div>
+          )}
+
+          <div className="grid grid-cols-2 gap-3">
+            <input type="date" className="bg-slate-50 p-4 rounded-xl font-bold text-xs" 
+              value={formData.date} onChange={e=>setFormData({...formData, date: e.target.value})} />
+            <select className="bg-slate-50 p-4 rounded-xl font-bold text-xs"
+              value={formData.category} onChange={e=>setFormData({...formData, category: e.target.value})}>
+              <option value="Sales">Sales</option>
+              <option value="Stock">Stock</option>
+              <option value="Wages">Wages</option>
+              <option value="Electricity">Electricity</option>
+            </select>
+          </div>
+
+          <button type="submit" className={`w-full py-5 rounded-2xl font-black text-white shadow-lg active:scale-95 transition-all ${entryType === 'income' ? 'bg-blue-600' : 'bg-red-600'}`}>
+            SAVE {entryType.toUpperCase()}
+          </button>
+        </form>
+      </main>
+
+      <nav className="fixed bottom-0 left-0 right-0 max-w-md mx-auto p-4 bg-white border-t border-slate-100 flex gap-2 z-20">
+        {[
+          { id: 'entry', icon: PlusCircle, label: 'Add' },
+          { id: 'history', icon: History, label: 'Log' },
+          { id: 'insights', icon: PieChart, label: 'Stats' }
+        ].map(tab => (
+          <button key={tab.id} onClick={()=>setActiveTab(tab.id)} className={`flex-1 py-4 rounded-2xl flex flex-col items-center transition-all ${activeTab===tab.id ? 'bg-slate-900 text-white shadow-lg' : 'text-slate-400'}`}>
+            <tab.icon size={20}/>
+            <span className="text-[8px] font-black uppercase mt-1 tracking-widest">{tab.label}</span>
+          </button>
+        ))}
+      </nav>
+    </div>
+  );
+}
+
