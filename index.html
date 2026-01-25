@@ -6,11 +6,10 @@
     <title>Finance Tracker ZAR</title>
     <script src="https://cdn.jsdelivr.net/npm/tesseract.js@4/dist/tesseract.min.js"></script>
     <style>
-        :root { --in: #16a34a; --out: #dc2626; --accent: #2563eb; --bg: #f8fafc; --text: #1e293b; --warn: #f59e0b; }
+        :root { --in: #16a34a; --out: #dc2626; --accent: #2563eb; --bg: #f8fafc; --text: #1e293b; }
         body { font-family: -apple-system, sans-serif; background: var(--bg); color: var(--text); padding: 15px; margin: 0; padding-top: 80px; }
         .search-header { position: fixed; top: 0; left: 0; right: 0; background: white; padding: 15px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); z-index: 100; }
         .card { background: white; padding: 20px; border-radius: 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); margin-bottom: 20px; }
-        .flex-row { display: flex; gap: 10px; margin-bottom: 15px; }
         .form-group { margin-bottom: 15px; }
         label { display: block; font-size: 11px; color: #64748b; text-transform: uppercase; font-weight: 700; margin-bottom: 4px; }
         select, input { width: 100%; padding: 12px; border: 1px solid #e2e8f0; border-radius: 10px; font-size: 16px; box-sizing: border-box; }
@@ -19,7 +18,7 @@
         .tab-btn.active-in { background: var(--in); color: white; }
         .tab-btn.active-out { background: var(--out); color: white; }
         .btn-process { width: 100%; padding: 16px; background: var(--accent); color: white; border: none; border-radius: 12px; font-size: 16px; font-weight: 700; cursor: pointer; }
-        #ocrStatus { font-size: 12px; color: var(--accent); margin-top: 5px; font-weight: bold; }
+        #ocrStatus { font-size: 12px; font-weight: bold; margin-top: 5px; }
         table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 10px; }
         td { padding: 10px 0; border-top: 1px solid #f1f5f9; }
         .del-icon { color: #cbd5e1; cursor: pointer; padding: 5px; font-size: 16px; text-align: right; }
@@ -28,7 +27,7 @@
 <body>
 
 <div class="search-header">
-    <input type="text" id="searchInput" placeholder="🔍 Search Supplier/Category..." onkeyup="renderApp()">
+    <input type="text" id="searchInput" placeholder="🔍 Search History..." onkeyup="renderApp()">
 </div>
 
 <div class="card">
@@ -36,29 +35,31 @@
         <button id="tabIn" class="tab-btn active-in" onclick="setEntryMode('in')">Money In</button>
         <button id="tabOut" class="tab-btn" onclick="setEntryMode('out')">Money Out</button>
     </div>
-    <div class="form-group"><label>Day</label><select id="entryDay"></select></div>
-    <div class="form-group"><label>Total Amount (R)</label><input type="number" id="entryAmount" step="0.01" placeholder="0.00"></div>
+    
     <div class="form-group">
-        <label>Scan Receipt/Invoice</label>
-        <input type="file" id="cameraInput" accept="image/*">
+        <label>Scan Receipt</label>
+        <input type="file" id="cameraInput" accept="image/*" capture="environment">
         <div id="ocrStatus"></div>
     </div>
+
+    <div class="form-group"><label>Amount (R)</label><input type="number" id="entryAmount" step="0.01" placeholder="0.00"></div>
+    
     <div id="outOnlyFields" class="hidden">
         <div class="form-group"><label>Category</label><select id="entryCategory"></select></div>
         <div class="form-group"><label>Supplier</label><select id="entrySupplier"></select></div>
     </div>
-    <button class="btn-process" onclick="processEntry()">PROCESS DATA</button>
+    
+    <button class="btn-process" onclick="processEntry()">SAVE TRANSACTION</button>
 </div>
 
 <div class="card">
-    <h3>Monthly Summary</h3>
-    <div id="monthSummaryUI"></div>
+    <h3>Monthly Total</h3>
+    <div id="monthSummaryUI" style="font-size: 18px; font-weight: bold;"></div>
 </div>
 
 <div class="card">
-    <h3 id="historyTitle">Recent History</h3>
+    <h3>Recent Activity</h3>
     <table>
-        <thead><tr><th align="left">Date</th><th align="left">Info</th><th align="left">Amount</th><th></th></tr></thead>
         <tbody id="historyBody"></tbody>
     </table>
 </div>
@@ -66,34 +67,36 @@
 <script>
     let mode = 'in';
     let records = JSON.parse(localStorage.getItem('f_data')) || [];
-    let cats = JSON.parse(localStorage.getItem('f_cats')) || ['Salary', 'Groceries', 'Petrol', 'Rent'];
-    let sups = JSON.parse(localStorage.getItem('f_sups')) || ['Employer', 'Checkers', 'Shell', 'Mosam Enterprise'];
-
-    const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
-    for(let i=1; i<=31; i++) document.getElementById('entryDay').innerHTML += `<option value="${i}">${i}</option>`;
-    document.getElementById('entryDay').value = new Date().getDate();
+    let cats = JSON.parse(localStorage.getItem('f_cats')) || ['Salary', 'Groceries', 'Petrol', 'Rent', 'General'];
+    let sups = JSON.parse(localStorage.getItem('f_sups')) || ['Employer', 'Checkers', 'Shell', 'Mosam Enterprise', 'Other'];
 
     function setEntryMode(m) {
         mode = m;
         document.getElementById('tabIn').className = m === 'in' ? 'tab-btn active-in' : 'tab-btn';
         document.getElementById('tabOut').className = m === 'out' ? 'tab-btn active-out' : 'tab-btn';
-        document.getElementById('outOnlyFields').classList.toggle('hidden', m === 'in');
+        document.getElementById('outOnlyFields').style.display = m === 'out' ? 'block' : 'none';
     }
 
     function processEntry() {
-        const amtInput = document.getElementById('entryAmount');
-        const amt = parseFloat(amtInput.value);
-        if(!amt) { alert("Enter amount"); return; }
+        const amt = parseFloat(document.getElementById('entryAmount').value);
+        if(!amt) return alert("Please enter an amount");
+        
         records.push({
-            id: Date.now(), type: mode, month: new Date().getMonth(), year: 2026,
-            day: document.getElementById('entryDay').value, amount: amt,
+            id: Date.now(),
+            type: mode,
+            month: new Date().getMonth(),
+            day: new Date().getDate(),
+            amount: amt,
             category: mode === 'out' ? document.getElementById('entryCategory').value : 'Income',
             supplier: mode === 'out' ? document.getElementById('entrySupplier').value : 'N/A',
             timestamp: Date.now()
         });
+        
         localStorage.setItem('f_data', JSON.stringify(records));
-        amtInput.value = ''; document.getElementById('ocrStatus').innerText = ''; renderApp();
-        alert("Saved!");
+        document.getElementById('entryAmount').value = '';
+        document.getElementById('ocrStatus').innerText = '';
+        renderApp();
+        alert("Transaction Recorded!");
     }
 
     function deleteRecord(id) {
@@ -112,34 +115,47 @@
         const filtered = records.filter(r => r.month == new Date().getMonth());
         const tin = filtered.filter(r => r.type == 'in').reduce((s, r) => s + r.amount, 0);
         const tout = filtered.filter(r => r.type == 'out').reduce((s, r) => s + r.amount, 0);
-        document.getElementById('monthSummaryUI').innerHTML = `In: R${tin.toFixed(2)} | Out: R${tout.toFixed(2)}`;
         
-        let displayList = q ? records.filter(r => r.supplier.toLowerCase().includes(q) || r.category.toLowerCase().includes(q)) : [...records].sort((a,b) => b.timestamp - a.timestamp).slice(0, 5);
+        document.getElementById('monthSummaryUI').innerHTML = `
+            <span style="color:var(--in)">In: R${tin.toFixed(2)}</span><br>
+            <span style="color:var(--out)">Out: R${tout.toFixed(2)}</span>
+        `;
+        
+        let displayList = q ? records.filter(r => r.supplier.toLowerCase().includes(q)) : [...records].sort((a,b) => b.timestamp - a.timestamp).slice(0, 10);
 
         document.getElementById('historyBody').innerHTML = displayList.map(r => `
-            <tr><td>${r.day} ${months[r.month]}</td><td>${r.supplier !== 'N/A' ? r.supplier : r.category}</td><td style="color:${r.type=='in'?'var(--in)':'var(--out)'}">R${r.amount.toFixed(2)}</td><td class="del-icon" onclick="deleteRecord(${r.id})">🗑️</td></tr>
+            <tr>
+                <td>${r.day}/${new Date().getMonth()+1}</td>
+                <td>${r.supplier !== 'N/A' ? r.supplier : r.category}</td>
+                <td style="color:${r.type=='in'?'var(--in)':'var(--out)'}">R${r.amount.toFixed(2)}</td>
+                <td class="del-icon" onclick="deleteRecord(${r.id})">🗑️</td>
+            </tr>
         `).join('');
     }
 
     document.getElementById('cameraInput').onchange = (e) => {
-        const status = document.getElementById('ocrStatus'); status.innerText = "Scanning... hold on.";
+        const status = document.getElementById('ocrStatus');
+        status.innerText = "⌛ Reading receipt...";
+        status.style.color = "var(--accent)";
+        
         Tesseract.recognize(e.target.files[0], 'eng').then(({data:{text}}) => {
-            console.log(text);
-            // Improved regex to find anything that looks like a price
             const m = text.match(/\d+[\.,]\d{2}/g); 
             if(m) {
-                const cleanNumbers = m.map(n => parseFloat(n.replace(',', '.')));
-                const found = Math.max(...cleanNumbers);
+                const found = Math.max(...m.map(n => parseFloat(n.replace(',', '.'))));
                 document.getElementById('entryAmount').value = found;
-                status.innerText = "Found: R" + found;
+                status.innerText = "✅ Found R" + found;
                 status.style.color = "var(--in)";
             } else { 
-                status.innerText = "Not found. Try a clearer photo.";
+                status.innerText = "❌ No price found. Please type manually.";
                 status.style.color = "var(--out)";
             }
+        }).catch(() => {
+            status.innerText = "❌ Scan failed. Type manually.";
+            status.style.color = "var(--out)";
         });
     };
 
+    setEntryMode('in');
     renderApp();
 </script>
 </body>
