@@ -10,7 +10,6 @@
         body { font-family: -apple-system, sans-serif; background: var(--bg); color: var(--text); padding: 15px; margin: 0; padding-top: 80px; }
         .search-header { position: fixed; top: 0; left: 0; right: 0; background: white; padding: 15px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); z-index: 100; }
         .card { background: white; padding: 20px; border-radius: 16px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); margin-bottom: 20px; }
-        .backup-alert { background: var(--warn); color: white; padding: 10px; border-radius: 8px; margin-bottom: 15px; text-align: center; font-weight: bold; display: none; }
         .flex-row { display: flex; gap: 10px; margin-bottom: 15px; }
         .form-group { margin-bottom: 15px; }
         label { display: block; font-size: 11px; color: #64748b; text-transform: uppercase; font-weight: 700; margin-bottom: 4px; }
@@ -20,9 +19,6 @@
         .tab-btn.active-in { background: var(--in); color: white; }
         .tab-btn.active-out { background: var(--out); color: white; }
         .btn-process { width: 100%; padding: 16px; background: var(--accent); color: white; border: none; border-radius: 12px; font-size: 16px; font-weight: 700; cursor: pointer; }
-        .btn-sm { padding: 8px; font-size: 12px; border-radius: 6px; border: 1px solid #cbd5e1; cursor: pointer; background: white; flex: 1; text-align: center; }
-        .summary-line { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid #f1f5f9; }
-        .hidden { display: none; }
         #ocrStatus { font-size: 12px; color: var(--accent); margin-top: 5px; font-weight: bold; }
         table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 10px; }
         td { padding: 10px 0; border-top: 1px solid #f1f5f9; }
@@ -33,16 +29,6 @@
 
 <div class="search-header">
     <input type="text" id="searchInput" placeholder="🔍 Search Supplier/Category..." onkeyup="renderApp()">
-</div>
-
-<div id="backupReminder" class="backup-alert">⚠️ Weekly Backup Due!</div>
-
-<div class="card">
-    <label>Current View</label>
-    <div class="flex-row">
-        <select id="viewMonth" onchange="renderApp()"></select>
-        <select id="viewYear" onchange="renderApp()"><option>2025</option><option selected>2026</option></select>
-    </div>
 </div>
 
 <div class="card">
@@ -70,11 +56,6 @@
 </div>
 
 <div class="card">
-    <h3>Yearly Supplier Spending</h3>
-    <div id="yearSupplierUI"></div>
-</div>
-
-<div class="card">
     <h3 id="historyTitle">Recent History</h3>
     <table>
         <thead><tr><th align="left">Date</th><th align="left">Info</th><th align="left">Amount</th><th></th></tr></thead>
@@ -82,43 +63,13 @@
     </table>
 </div>
 
-<div class="card">
-    <h3>Backup & Export</h3>
-    <div class="flex-row">
-        <button class="btn-sm" onclick="exportBackup()">💾 Backup</button>
-        <button class="btn-sm" onclick="exportCSV()">📊 CSV</button>
-    </div>
-    <div class="flex-row">
-        <label class="btn-sm">📂 Restore<input type="file" class="hidden" onchange="importBackup(event)"></label>
-    </div>
-</div>
-
-<div class="card">
-    <h3>Manage Menus</h3>
-    <div class="form-group">
-        <label>Add Category</label>
-        <div class="flex-row"><input type="text" id="newCatName"><button class="btn-sm" onclick="addItem('cats', 'newCatName')">Add</button></div>
-        <div id="listCats"></div>
-    </div>
-    <div class="form-group">
-        <label>Add Supplier</label>
-        <div class="flex-row"><input type="text" id="newSupName"><button class="btn-sm" onclick="addItem('sups', 'newSupName')">Add</button></div>
-        <div id="listSups"></div>
-    </div>
-</div>
-
 <script>
     let mode = 'in';
     let records = JSON.parse(localStorage.getItem('f_data')) || [];
-    let cats = JSON.parse(localStorage.getItem('f_cats')) || ['Salary', 'Groceries', 'Rent'];
-    let sups = JSON.parse(localStorage.getItem('f_sups')) || ['Employer', 'Checkers', 'Shell'];
-    let lastBackup = localStorage.getItem('f_last_backup') || Date.now();
+    let cats = JSON.parse(localStorage.getItem('f_cats')) || ['Salary', 'Groceries', 'Petrol', 'Rent'];
+    let sups = JSON.parse(localStorage.getItem('f_sups')) || ['Employer', 'Checkers', 'Shell', 'Mosam Enterprise'];
 
     const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
-    const mSel = document.getElementById('viewMonth');
-    months.forEach((m, i) => mSel.innerHTML += `<option value="${i}">${m}</option>`);
-    mSel.value = new Date().getMonth();
-
     for(let i=1; i<=31; i++) document.getElementById('entryDay').innerHTML += `<option value="${i}">${i}</option>`;
     document.getElementById('entryDay').value = new Date().getDate();
 
@@ -134,7 +85,7 @@
         const amt = parseFloat(amtInput.value);
         if(!amt) { alert("Enter amount"); return; }
         records.push({
-            id: Date.now(), type: mode, month: mSel.value, year: document.getElementById('viewYear').value,
+            id: Date.now(), type: mode, month: new Date().getMonth(), year: 2026,
             day: document.getElementById('entryDay').value, amount: amt,
             category: mode === 'out' ? document.getElementById('entryCategory').value : 'Income',
             supplier: mode === 'out' ? document.getElementById('entrySupplier').value : 'N/A',
@@ -153,85 +104,39 @@
         }
     }
 
-    function addItem(t, id) {
-        let v = document.getElementById(id).value.trim(); if(!v) return;
-        if(t === 'cats') cats.push(v); else sups.push(v);
-        localStorage.setItem('f_cats', JSON.stringify(cats)); localStorage.setItem('f_sups', JSON.stringify(sups));
-        document.getElementById(id).value = ''; renderApp();
-    }
-
     function renderApp() {
         document.getElementById('entryCategory').innerHTML = cats.map(c => `<option>${c}</option>`).join('');
         document.getElementById('entrySupplier').innerHTML = sups.map(s => `<option>${s}</option>`).join('');
-        document.getElementById('listCats').innerHTML = cats.map(c => `<small style="background:#eee;padding:2px 5px;margin:2px;border-radius:4px;display:inline-block">${c}</small>`).join('');
-        document.getElementById('listSups').innerHTML = sups.map(s => `<small style="background:#eee;padding:2px 5px;margin:2px;border-radius:4px;display:inline-block">${s}</small>`).join('');
-
-        const m = mSel.value, y = document.getElementById('viewYear').value;
-        const q = document.getElementById('searchInput').value.toLowerCase();
         
-        const filtered = records.filter(r => r.month == m && r.year == y);
+        const q = document.getElementById('searchInput').value.toLowerCase();
+        const filtered = records.filter(r => r.month == new Date().getMonth());
         const tin = filtered.filter(r => r.type == 'in').reduce((s, r) => s + r.amount, 0);
         const tout = filtered.filter(r => r.type == 'out').reduce((s, r) => s + r.amount, 0);
         document.getElementById('monthSummaryUI').innerHTML = `In: R${tin.toFixed(2)} | Out: R${tout.toFixed(2)}`;
         
-        let displayList = [];
-        if(q) {
-            document.getElementById('historyTitle').innerText = "Search Results";
-            displayList = records.filter(r => r.supplier.toLowerCase().includes(q) || r.category.toLowerCase().includes(q));
-        } else {
-            document.getElementById('historyTitle').innerText = "Recent History";
-            displayList = [...records].sort((a,b) => b.timestamp - a.timestamp).slice(0, 5);
-        }
+        let displayList = q ? records.filter(r => r.supplier.toLowerCase().includes(q) || r.category.toLowerCase().includes(q)) : [...records].sort((a,b) => b.timestamp - a.timestamp).slice(0, 5);
 
         document.getElementById('historyBody').innerHTML = displayList.map(r => `
             <tr><td>${r.day} ${months[r.month]}</td><td>${r.supplier !== 'N/A' ? r.supplier : r.category}</td><td style="color:${r.type=='in'?'var(--in)':'var(--out)'}">R${r.amount.toFixed(2)}</td><td class="del-icon" onclick="deleteRecord(${r.id})">🗑️</td></tr>
         `).join('');
-
-        const yrOut = records.filter(r => r.year == y && r.type == 'out');
-        const sTot = {}; yrOut.forEach(r => sTot[r.supplier] = (sTot[r.supplier] || 0) + r.amount);
-        let sHtml = ""; for(let s in sTot) sHtml += `<div class="summary-line"><span>${s}</span><b>R${sTot[s].toFixed(2)}</b></div>`;
-        document.getElementById('yearSupplierUI').innerHTML = sHtml || "No data.";
-
-        checkBackupReminder();
-    }
-
-    function checkBackupReminder() {
-        const week = 7 * 24 * 60 * 60 * 1000;
-        document.getElementById('backupReminder').style.display = (Date.now() - lastBackup > week) ? 'block' : 'none';
-    }
-
-    function exportBackup() {
-        const blob = new Blob([JSON.stringify({records, cats, sups})], {type: 'application/json'});
-        const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'backup.json'; a.click();
-        lastBackup = Date.now(); localStorage.setItem('f_last_backup', lastBackup); renderApp();
-    }
-
-    function exportCSV() {
-        let csv = "Date,Type,Amount,Category,Supplier\n";
-        records.forEach(r => { csv += `${r.day}/${parseInt(r.month)+1}/${r.year},${r.type},${r.amount},${r.category},${r.supplier}\n`; });
-        const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv], {type: 'text/csv'})); a.download = 'export.csv'; a.click();
-    }
-
-    function importBackup(e) {
-        const reader = new FileReader();
-        reader.onload = (event) => {
-            const d = JSON.parse(event.target.result);
-            records = d.records; cats = d.cats; sups = d.sups;
-            localStorage.setItem('f_data', JSON.stringify(records)); localStorage.setItem('f_cats', JSON.stringify(cats)); localStorage.setItem('f_sups', JSON.stringify(sups));
-            location.reload();
-        };
-        reader.readAsText(e.target.files[0]);
     }
 
     document.getElementById('cameraInput').onchange = (e) => {
-        const status = document.getElementById('ocrStatus'); status.innerText = "Scanning...";
+        const status = document.getElementById('ocrStatus'); status.innerText = "Scanning... hold on.";
         Tesseract.recognize(e.target.files[0], 'eng').then(({data:{text}}) => {
-            const m = text.match(/\d+\.\d{2}/g);
+            console.log(text);
+            // Improved regex to find anything that looks like a price
+            const m = text.match(/\d+[\.,]\d{2}/g); 
             if(m) {
-                const found = Math.max(...m.map(Number));
+                const cleanNumbers = m.map(n => parseFloat(n.replace(',', '.')));
+                const found = Math.max(...cleanNumbers);
                 document.getElementById('entryAmount').value = found;
                 status.innerText = "Found: R" + found;
-            } else { status.innerText = "Not found."; }
+                status.style.color = "var(--in)";
+            } else { 
+                status.innerText = "Not found. Try a clearer photo.";
+                status.style.color = "var(--out)";
+            }
         });
     };
 
