@@ -20,7 +20,7 @@
         .tab-btn.active-out { background: var(--out); color: white; }
         .btn-process { width: 100%; padding: 16px; background: var(--accent); color: white; border: none; border-radius: 12px; font-size: 16px; font-weight: 700; cursor: pointer; }
         .btn-sm { padding: 8px; font-size: 12px; border-radius: 6px; border: 1px solid #cbd5e1; cursor: pointer; background: white; flex: 1; }
-        #ocrStatus { font-size: 12px; font-weight: bold; margin-top: 5px; white-space: pre-wrap; }
+        #ocrStatus { font-size: 12px; font-weight: bold; margin-top: 5px; white-space: pre-wrap; color: var(--accent); }
         table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 10px; }
         td { padding: 10px 0; border-top: 1px solid #f1f5f9; }
         .del-icon { color: #cbd5e1; cursor: pointer; padding: 5px; font-size: 16px; text-align: right; }
@@ -31,7 +31,7 @@
 <body>
 
 <div class="search-header">
-    <input type="text" id="searchInput" placeholder="🔍 Search Supplier/Category..." onkeyup="renderApp()">
+    <input type="text" id="searchInput" placeholder="🔍 Search History..." onkeyup="renderApp()">
 </div>
 
 <div class="card">
@@ -40,6 +40,11 @@
         <button id="tabOut" class="tab-btn" onclick="setEntryMode('out')">Money Out</button>
     </div>
     
+    <div class="flex-row">
+        <div class="form-group" style="flex: 2;"><label>Month</label><select id="entryMonth"></select></div>
+        <div class="form-group" style="flex: 1;"><label>Day</label><select id="entryDay"></select></div>
+    </div>
+
     <div class="form-group">
         <label>Scan Receipt/Invoice</label>
         <input type="file" id="cameraInput" accept="image/*">
@@ -76,9 +81,7 @@
             <button class="btn-sm" onclick="addItem('sups')">+ Supplier</button>
         </div>
     </div>
-    <label>Categories (Tap x to remove)</label>
     <div id="listCats" style="margin-bottom: 10px;"></div>
-    <label>Suppliers (Tap x to remove)</label>
     <div id="listSups"></div>
 </div>
 
@@ -87,6 +90,15 @@
     let records = JSON.parse(localStorage.getItem('f_data')) || [];
     let cats = JSON.parse(localStorage.getItem('f_cats')) || ['Salary', 'Groceries', 'Rent'];
     let sups = JSON.parse(localStorage.getItem('f_sups')) || ['Employer', 'Checkers', 'Mosam Enterprise'];
+    const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+
+    const monthSel = document.getElementById('entryMonth');
+    months.forEach((m, i) => monthSel.innerHTML += `<option value="${i}">${m}</option>`);
+    monthSel.value = new Date().getMonth();
+
+    const daySel = document.getElementById('entryDay');
+    for(let i=1; i<=31; i++) daySel.innerHTML += `<option value="${i}">${i}</option>`;
+    daySel.value = new Date().getDate();
 
     function setEntryMode(m) {
         mode = m;
@@ -99,8 +111,11 @@
         const amt = parseFloat(document.getElementById('entryAmount').value);
         if(!amt) return alert("Enter amount");
         records.push({
-            id: Date.now(), type: mode, month: new Date().getMonth(), day: new Date().getDate(),
-            amount: amt, category: mode === 'out' ? document.getElementById('entryCategory').value : 'Income',
+            id: Date.now(), type: mode, 
+            month: parseInt(document.getElementById('entryMonth').value), 
+            day: parseInt(document.getElementById('entryDay').value),
+            amount: amt, 
+            category: mode === 'out' ? document.getElementById('entryCategory').value : 'Income',
             supplier: mode === 'out' ? document.getElementById('entrySupplier').value : 'N/A',
             timestamp: Date.now()
         });
@@ -143,13 +158,13 @@
         document.getElementById('listSups').innerHTML = sups.map((s, i) => `<span class="chip">${s} <span class="chip-del" onclick="removeItem('sups', ${i})">×</span></span>`).join('');
 
         const q = document.getElementById('searchInput').value.toLowerCase();
-        const filtered = records.filter(r => r.month == new Date().getMonth());
+        const curM = new Date().getMonth();
+        const filtered = records.filter(r => r.month == curM);
         const tin = filtered.filter(r => r.type == 'in').reduce((s, r) => s + r.amount, 0);
         const tout = filtered.filter(r => r.type == 'out').reduce((s, r) => s + r.amount, 0);
         document.getElementById('monthSummaryUI').innerHTML = `In: <b>R${tin.toFixed(2)}</b> | Out: <b>R${tout.toFixed(2)}</b>`;
         
         let displayList = q ? records.filter(r => r.supplier.toLowerCase().includes(q) || r.category.toLowerCase().includes(q)) : [...records].sort((a,b) => b.timestamp - a.timestamp).slice(0, 10);
-        const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
         document.getElementById('historyBody').innerHTML = displayList.map(r => `
             <tr><td>${r.day} ${months[r.month]}</td><td>${r.supplier !== 'N/A' ? r.supplier : r.category}</td><td style="color:${r.type=='in'?'var(--in)':'var(--out)'}">R${r.amount.toFixed(2)}</td><td class="del-icon" onclick="deleteRecord(${r.id})">🗑️</td></tr>
         `).join('');
@@ -158,35 +173,6 @@
     document.getElementById('cameraInput').onchange = (e) => {
         const status = document.getElementById('ocrStatus'); status.innerText = "⌛ Reading...";
         Tesseract.recognize(e.target.files[0], 'eng').then(({data:{text}}) => {
-            const lines = text.toUpperCase();
+            const cleanText = text.toUpperCase();
             
-            // 1. Find the Price
-            const m = text.match(/\d+[\.,]\d{2}/g); 
-            if(m) {
-                const foundPrice = Math.max(...m.map(n => parseFloat(n.replace(',', '.'))));
-                document.getElementById('entryAmount').value = foundPrice;
-                status.innerText = "✅ Found R" + foundPrice;
-            } else {
-                status.innerText = "❌ Price not found.";
-            }
-
-            // 2. Find the Supplier
-            setEntryMode('out'); // Assume it's an expense if scanning
-            let foundSup = false;
-            sups.forEach(s => {
-                if(lines.includes(s.toUpperCase())) {
-                    document.getElementById('entrySupplier').value = s;
-                    status.innerText += "\n🏪 Supplier: " + s;
-                    foundSup = true;
-                }
-            });
-            
-            if(!foundSup) status.innerText += "\n❓ Supplier unknown. Pick manually.";
-
-        });
-    };
-
-    renderApp();
-</script>
-</body>
-</html>
+            // 1. PRICE SCAN
