@@ -19,7 +19,7 @@
         .tab-btn.active-in { background: var(--in); color: white; }
         .tab-btn.active-out { background: var(--out); color: white; }
         .btn-process { width: 100%; padding: 16px; background: var(--accent); color: white; border: none; border-radius: 12px; font-size: 16px; font-weight: 700; cursor: pointer; }
-        .btn-sm { padding: 8px; font-size: 12px; border-radius: 6px; border: 1px solid #cbd5e1; cursor: pointer; background: white; }
+        .btn-sm { padding: 8px; font-size: 12px; border-radius: 6px; border: 1px solid #cbd5e1; cursor: pointer; background: white; flex: 1; }
         #ocrStatus { font-size: 12px; font-weight: bold; margin-top: 5px; }
         table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 10px; }
         td { padding: 10px 0; border-top: 1px solid #f1f5f9; }
@@ -31,7 +31,7 @@
 <body>
 
 <div class="search-header">
-    <input type="text" id="searchInput" placeholder="🔍 Search History..." onkeyup="renderApp()">
+    <input type="text" id="searchInput" placeholder="🔍 Search Supplier/Category..." onkeyup="renderApp()">
 </div>
 
 <div class="card">
@@ -41,52 +41,52 @@
     </div>
     
     <div class="form-group">
-        <label>Scan Receipt</label>
+        <label>Scan Receipt/Invoice</label>
         <input type="file" id="cameraInput" accept="image/*">
         <div id="ocrStatus"></div>
     </div>
 
-    <div class="form-group"><label>Amount (R)</label><input type="number" id="entryAmount" step="0.01" placeholder="0.00"></div>
+    <div class="form-group"><label>Total Amount (R)</label><input type="number" id="entryAmount" step="0.01" placeholder="0.00"></div>
     
     <div id="outOnlyFields" style="display:none;">
         <div class="form-group"><label>Category</label><select id="entryCategory"></select></div>
         <div class="form-group"><label>Supplier</label><select id="entrySupplier"></select></div>
     </div>
     
-    <button class="btn-process" onclick="processEntry()">SAVE TRANSACTION</button>
+    <button class="btn-process" onclick="processEntry()">PROCESS DATA</button>
 </div>
 
 <div class="card">
     <h3>Monthly Total</h3>
-    <div id="monthSummaryUI" style="font-size: 18px; font-weight: bold;"></div>
+    <div id="monthSummaryUI" style="font-size: 16px;"></div>
 </div>
 
 <div class="card">
-    <h3>Recent Activity</h3>
+    <h3>Recent History</h3>
     <table><tbody id="historyBody"></tbody></table>
 </div>
 
-<div class="card">
-    <h3>Manage Menus</h3>
+<div class="card" style="border: 2px solid var(--accent);">
+    <h3 style="color: var(--accent);">Manage Menus</h3>
     <div class="form-group">
-        <label>Add New</label>
+        <label>Add New Name</label>
         <div class="flex-row">
-            <input type="text" id="newItemName" placeholder="Name...">
-            <button class="btn-sm" onclick="addItem('cats')">+ Cat</button>
-            <button class="btn-sm" onclick="addItem('sups')">+ Sup</button>
+            <input type="text" id="newItemName" placeholder="Type here...">
+            <button class="btn-sm" onclick="addItem('cats')">+ Category</button>
+            <button class="btn-sm" onclick="addItem('sups')">+ Supplier</button>
         </div>
     </div>
-    <label>Categories</label>
-    <div id="listCats" style="margin-bottom: 15px;"></div>
-    <label>Suppliers</label>
+    <label>Categories (Tap x to remove)</label>
+    <div id="listCats" style="margin-bottom: 10px;"></div>
+    <label>Suppliers (Tap x to remove)</label>
     <div id="listSups"></div>
 </div>
 
 <script>
     let mode = 'in';
     let records = JSON.parse(localStorage.getItem('f_data')) || [];
-    let cats = JSON.parse(localStorage.getItem('f_cats')) || ['Salary', 'Groceries', 'Petrol', 'Rent'];
-    let sups = JSON.parse(localStorage.getItem('f_sups')) || ['Employer', 'Checkers', 'Shell', 'Mosam Enterprise'];
+    let cats = JSON.parse(localStorage.getItem('f_cats')) || ['Salary', 'Groceries', 'Rent'];
+    let sups = JSON.parse(localStorage.getItem('f_sups')) || ['Employer', 'Checkers', 'Mosam Enterprise'];
 
     function setEntryMode(m) {
         mode = m;
@@ -120,13 +120,15 @@
     }
 
     function removeItem(type, index) {
-        if(type === 'cats') cats.splice(index, 1); else sups.splice(index, 1);
-        localStorage.setItem('f_' + type, JSON.stringify(type === 'cats' ? cats : sups));
-        renderApp();
+        if(confirm("Remove this item?")) {
+            if(type === 'cats') cats.splice(index, 1); else sups.splice(index, 1);
+            localStorage.setItem('f_' + type, JSON.stringify(type === 'cats' ? cats : sups));
+            renderApp();
+        }
     }
 
     function deleteRecord(id) {
-        if(confirm("Delete transaction?")) {
+        if(confirm("Delete this transaction?")) {
             records = records.filter(r => r.id !== id);
             localStorage.setItem('f_data', JSON.stringify(records));
             renderApp();
@@ -144,11 +146,12 @@
         const filtered = records.filter(r => r.month == new Date().getMonth());
         const tin = filtered.filter(r => r.type == 'in').reduce((s, r) => s + r.amount, 0);
         const tout = filtered.filter(r => r.type == 'out').reduce((s, r) => s + r.amount, 0);
-        document.getElementById('monthSummaryUI').innerHTML = `<span style="color:var(--in)">In: R${tin.toFixed(2)}</span> | <span style="color:var(--out)">Out: R${tout.toFixed(2)}</span>`;
+        document.getElementById('monthSummaryUI').innerHTML = `In: <b>R${tin.toFixed(2)}</b> | Out: <b>R${tout.toFixed(2)}</b>`;
         
         let displayList = q ? records.filter(r => r.supplier.toLowerCase().includes(q) || r.category.toLowerCase().includes(q)) : [...records].sort((a,b) => b.timestamp - a.timestamp).slice(0, 10);
+        const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
         document.getElementById('historyBody').innerHTML = displayList.map(r => `
-            <tr><td>${r.day}/${new Date().getMonth()+1}</td><td>${r.supplier !== 'N/A' ? r.supplier : r.category}</td><td style="color:${r.type=='in'?'var(--in)':'var(--out)'}">R${r.amount.toFixed(2)}</td><td class="del-icon" onclick="deleteRecord(${r.id})">🗑️</td></tr>
+            <tr><td>${r.day} ${months[r.month]}</td><td>${r.supplier !== 'N/A' ? r.supplier : r.category}</td><td style="color:${r.type=='in'?'var(--in)':'var(--out)'}">R${r.amount.toFixed(2)}</td><td class="del-icon" onclick="deleteRecord(${r.id})">🗑️</td></tr>
         `).join('');
     }
 
