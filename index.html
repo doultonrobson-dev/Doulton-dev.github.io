@@ -25,16 +25,14 @@
         .hidden { display: none; }
         #ocrStatus { font-size: 12px; color: var(--accent); margin-top: 5px; font-weight: bold; }
         table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 10px; }
-        th { text-align: left; color: #64748b; font-size: 10px; text-transform: uppercase; padding: 8px 0; }
         td { padding: 10px 0; border-top: 1px solid #f1f5f9; }
-        .del-icon { color: #cbd5e1; cursor: pointer; padding: 5px; font-size: 16px; }
-        .del-icon:hover { color: var(--out); }
+        .del-icon { color: #cbd5e1; cursor: pointer; padding: 5px; font-size: 16px; text-align: right; }
     </style>
 </head>
 <body>
 
 <div class="search-header">
-    <input type="text" id="searchInput" placeholder="🔍 Search Supplier or Category..." onkeyup="renderApp()">
+    <input type="text" id="searchInput" placeholder="🔍 Search Supplier/Category..." onkeyup="renderApp()">
 </div>
 
 <div id="backupReminder" class="backup-alert">⚠️ Weekly Backup Due!</div>
@@ -79,7 +77,7 @@
 <div class="card">
     <h3 id="historyTitle">Recent History</h3>
     <table>
-        <thead><tr><th>Date</th><th>Info</th><th>Amount</th><th></th></tr></thead>
+        <thead><tr><th align="left">Date</th><th align="left">Info</th><th align="left">Amount</th><th></th></tr></thead>
         <tbody id="historyBody"></tbody>
     </table>
 </div>
@@ -112,8 +110,8 @@
 <script>
     let mode = 'in';
     let records = JSON.parse(localStorage.getItem('f_data')) || [];
-    let cats = JSON.parse(localStorage.getItem('f_cats')) || ['Salary', 'Groceries', 'Petrol'];
-    let sups = JSON.parse(localStorage.getItem('f_sups')) || ['Employer', 'Checkers', 'Shell'];
+    let cats = JSON.parse(localStorage.getItem('f_cats')) || ['Salary', 'Groceries', 'Rent', 'Petrol'];
+    let sups = JSON.parse(localStorage.getItem('f_sups')) || ['Employer', 'Checkers', 'Woolworths', 'Shell'];
     let lastBackup = localStorage.getItem('f_last_backup') || Date.now();
 
     const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
@@ -132,19 +130,27 @@
     }
 
     function processEntry() {
-        const amt = parseFloat(document.getElementById('entryAmount').value);
-        if(!amt) return alert("Enter amount");
+        const amtInput = document.getElementById('entryAmount');
+        const amt = parseFloat(amtInput.value);
+        if(!amt) { alert("Please enter an amount"); return; }
+        
         records.push({
             id: Date.now(),
-            type: mode, month: mSel.value, year: document.getElementById('viewYear').value,
-            day: document.getElementById('entryDay').value, amount: amt,
+            type: mode, 
+            month: mSel.value, 
+            year: document.getElementById('viewYear').value,
+            day: document.getElementById('entryDay').value, 
+            amount: amt,
             category: mode === 'out' ? document.getElementById('entryCategory').value : 'Income',
             supplier: mode === 'out' ? document.getElementById('entrySupplier').value : 'N/A',
             timestamp: Date.now()
         });
+        
         localStorage.setItem('f_data', JSON.stringify(records));
-        document.getElementById('entryAmount').value = '';
+        amtInput.value = '';
+        document.getElementById('ocrStatus').innerText = '';
         renderApp();
+        alert("Transaction Recorded!");
     }
 
     function deleteRecord(id) {
@@ -153,6 +159,16 @@
             localStorage.setItem('f_data', JSON.stringify(records));
             renderApp();
         }
+    }
+
+    function addItem(t, id) {
+        let v = document.getElementById(id).value.trim();
+        if(!v) return;
+        if(t === 'cats') cats.push(v); else sups.push(v);
+        localStorage.setItem('f_cats', JSON.stringify(cats));
+        localStorage.setItem('f_sups', JSON.stringify(sups));
+        document.getElementById(id).value = '';
+        renderApp();
     }
 
     function renderApp() {
@@ -167,7 +183,10 @@
         const filtered = records.filter(r => r.month == m && r.year == y);
         const tin = filtered.filter(r => r.type == 'in').reduce((s, r) => s + r.amount, 0);
         const tout = filtered.filter(r => r.type == 'out').reduce((s, r) => s + r.amount, 0);
-        document.getElementById('monthSummaryUI').innerHTML = `In: R${tin.toFixed(2)} | Out: R${tout.toFixed(2)}`;
+        document.getElementById('monthSummaryUI').innerHTML = `
+            <div class="summary-line"><span>Money In:</span><b style="color:var(--in)">R${tin.toFixed(2)}</b></div>
+            <div class="summary-line"><span>Money Out:</span><b style="color:var(--out)">R${tout.toFixed(2)}</b></div>
+        `;
         
         let displayList = [];
         if(q) {
@@ -187,6 +206,11 @@
             </tr>
         `).join('');
 
+        const yrOut = records.filter(r => r.year == y && r.type == 'out');
+        const sTot = {}; yrOut.forEach(r => sTot[r.supplier] = (sTot[r.supplier] || 0) + r.amount);
+        let sHtml = ""; for(let s in sTot) sHtml += `<div class="summary-line"><span>${s}</span><b>R${sTot[s].toFixed(2)}</b></div>`;
+        document.getElementById('yearSupplierUI').innerHTML = sHtml || "No data.";
+
         checkBackupReminder();
     }
 
@@ -194,190 +218,44 @@
         const week = 7 * 24 * 60 * 60 * 1000;
         document.getElementById('backupReminder').style.display = (Date.now() - lastBackup > week) ? 'block' : 'none';
     }
-    function addItem(t, id) {
-        let v = document.getElementById(id).value; if(!v) return;
-        if(t === 'cats') cats.push(v); else sups.push(v);
-        localStorage.setItem
-        <button id="tabIn" class="tab-btn active-in" onclick="setEntryMode('in')">Money In</button>
-        <button id="tabOut" class="tab-btn" onclick="setEntryMode('out')">Money Out</button>
-    </div>
 
-    <div class="form-group">
-        <label>Day</label>
-        <select id="entryDay"></select>
-    </div>
-
-    <div class="form-group">
-        <label>Total Amount</label>
-        <input type="number" id="entryAmount" step="0.01" placeholder="0.00">
-    </div>
-
-    <div id="outOnlyFields" class="hidden">
-        <div class="form-group">
-            <label>Category</label>
-            <select id="entryCategory"></select>
-        </div>
-        <div class="form-group">
-            <label>Supplier</label>
-            <select id="entrySupplier"></select>
-        </div>
-        <div class="form-group">
-            <label>Scan Receipt (Camera)</label>
-            <input type="file" id="cameraInput" accept="image/*" capture="environment">
-            <div id="ocrStatus"></div>
-        </div>
-    </div>
-
-    <button class="btn-process" onclick="processEntry()">PROCESS DATA</button>
-</div>
-
-<div class="card">
-    <h3>Monthly Summary</h3>
-    <div id="monthSummaryUI"></div>
-</div>
-
-<div class="card">
-    <h3>Yearly Supplier Spending</h3>
-    <div id="yearSupplierUI"></div>
-</div>
-
-<div class="card" style="background: #f8fafc; border: 1px solid #e2e8f0;">
-    <h3>Edit Menus</h3>
-    <div class="form-group">
-        <label>Add Category</label>
-        <div class="flex-row">
-            <input type="text" id="newCatName" placeholder="e.g. Rent">
-            <button class="btn-sm" onclick="addItem('cats', 'newCatName')">Add</button>
-        </div>
-        <div id="listCats"></div>
-    </div>
-    <hr>
-    <div class="form-group">
-        <label>Add Supplier</label>
-        <div class="flex-row">
-            <input type="text" id="newSupName" placeholder="e.g. Amazon">
-            <button class="btn-sm" onclick="addItem('sups', 'newSupName')">Add</button>
-        </div>
-        <div id="listSups"></div>
-    </div>
-</div>
-
-<script>
-    let mode = 'in';
-    let records = JSON.parse(localStorage.getItem('f_data')) || [];
-    let cats = JSON.parse(localStorage.getItem('f_cats')) || ['Salary', 'Groceries', 'Utilities', 'Travel'];
-    let sups = JSON.parse(localStorage.getItem('f_sups')) || ['Employer', 'Local Shop', 'Gas Station'];
-
-    // Setup UI components
-    const months = ["January","February","March","April","May","June","July","August","September","October","November","December"];
-    const mSel = document.getElementById('viewMonth');
-    months.forEach((m, i) => mSel.innerHTML += `<option value="${i}">${m}</option>`);
-    mSel.value = new Date().getMonth();
-
-    const dSel = document.getElementById('entryDay');
-    for(let i=1; i<=31; i++) dSel.innerHTML += `<option value="${i}">${i}</option>`;
-    dSel.value = new Date().getDate();
-
-    function setEntryMode(m) {
-        mode = m;
-        document.getElementById('tabIn').className = m === 'in' ? 'tab-btn active-in' : 'tab-btn';
-        document.getElementById('tabOut').className = m === 'out' ? 'tab-btn active-out' : 'tab-btn';
-        document.getElementById('outOnlyFields').classList.toggle('hidden', m === 'in');
+    function exportBackup() {
+        const blob = new Blob([JSON.stringify({records, cats, sups})], {type: 'application/json'});
+        const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'finance_backup.json'; a.click();
+        lastBackup = Date.now(); localStorage.setItem('f_last_backup', lastBackup); renderApp();
     }
 
-    function addItem(type, inputId) {
-        let val = document.getElementById(inputId).value.trim();
-        if(!val) return;
-        if(type === 'cats') cats.push(val); else sups.push(val);
-        document.getElementById(inputId).value = '';
-        saveMeta();
+    function exportCSV() {
+        let csv = "Date,Type,Amount,Category,Supplier\n";
+        records.forEach(r => { csv += `${r.day}/${parseInt(r.month)+1}/${r.year},${r.type},${r.amount},${r.category},${r.supplier}\n`; });
+        const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv], {type: 'text/csv'})); a.download = 'finance_export.csv'; a.click();
     }
 
-    function deleteItem(type, index) {
-        if(type === 'cats') cats.splice(index, 1); else sups.splice(index, 1);
-        saveMeta();
-    }
-
-    function saveMeta() {
-        localStorage.setItem('f_cats', JSON.stringify(cats));
-        localStorage.setItem('f_sups', JSON.stringify(sups));
-        renderApp();
-    }
-
-    function processEntry() {
-        const amt = parseFloat(document.getElementById('entryAmount').value);
-        if(!amt) { alert("Please enter an amount."); return; }
-
-        const entry = {
-            id: Date.now(),
-            type: mode,
-            month: document.getElementById('viewMonth').value,
-            year: document.getElementById('viewYear').value,
-            day: document.getElementById('entryDay').value,
-            amount: amt,
-            category: mode === 'out' ? document.getElementById('entryCategory').value : 'Income',
-            supplier: mode === 'out' ? document.getElementById('entrySupplier').value : 'N/A'
+    function importBackup(e) {
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            const d = JSON.parse(event.target.result);
+            records = d.records; cats = d.cats; sups = d.sups;
+            localStorage.setItem('f_data', JSON.stringify(records)); localStorage.setItem('f_cats', JSON.stringify(cats)); localStorage.setItem('f_sups', JSON.stringify(sups));
+            location.reload();
         };
-
-        records.push(entry);
-        localStorage.setItem('f_data', JSON.stringify(records));
-        document.getElementById('entryAmount').value = '';
-        renderApp();
-        alert("Data saved successfully.");
+        reader.readAsText(e.target.files[0]);
     }
 
-    function renderApp() {
-        // Update entry dropdowns
-        document.getElementById('entryCategory').innerHTML = cats.map(c => `<option>${c}</option>`).join('');
-        document.getElementById('entrySupplier').innerHTML = sups.map(s => `<option>${s}</option>`).join('');
-        
-        // Update Edit lists
-        document.getElementById('listCats').innerHTML = cats.map((c, i) => `<span class="btn-sm">${c} <span class="btn-del" onclick="deleteItem('cats', ${i})">×</span></span> `).join('');
-        document.getElementById('listSups').innerHTML = sups.map((s, i) => `<span class="btn-sm">${s} <span class="btn-del" onclick="deleteItem('sups', ${i})">×</span></span> `).join('');
-
-        const vM = document.getElementById('viewMonth').value;
-        const vY = document.getElementById('viewYear').value;
-
-        // Monthly Summary
-        const monthlyRecords = records.filter(r => r.month == vM && r.year == vY);
-        const mIn = monthlyRecords.filter(r => r.type === 'in').reduce((sum, r) => sum + r.amount, 0);
-        const mOut = monthlyRecords.filter(r => r.type === 'out').reduce((sum, r) => sum + r.amount, 0);
-
-        document.getElementById('monthSummaryUI').innerHTML = `
-            <div class="summary-line"><span>Money In:</span><span style="color:var(--in)">+$${mIn.toFixed(2)}</span></div>
-            <div class="summary-line"><span>Money Out:</span><span style="color:var(--out)">-$${mOut.toFixed(2)}</span></div>
-            <div class="summary-total">Balance: $${(mIn - mOut).toFixed(2)}</div>
-        `;
-
-        // Yearly Supplier Summary
-        const yearlyOut = records.filter(r => r.year == vY && r.type === 'out');
-        const supplierTotals = {};
-        yearlyOut.forEach(r => {
-            supplierTotals[r.supplier] = (supplierTotals[r.supplier] || 0) + r.amount;
-        });
-
-        let supplierHTML = "";
-        for(let s in supplierTotals) {
-            supplierHTML += `<div class="summary-line"><span>${s}</span><b>$${supplierTotals[s].toFixed(2)}</b></div>`;
-        }
-        document.getElementById('yearSupplierUI').innerHTML = supplierHTML || "No supplier data for this year.";
-    }
-
-    // OCR CAMERA LOGIC
-    document.getElementById('cameraInput').addEventListener('change', function(e) {
+    document.getElementById('cameraInput').onchange = (e) => {
         const status = document.getElementById('ocrStatus');
-        status.innerText = "Scanning receipt... hold on.";
-        Tesseract.recognize(e.target.files[0], 'eng').then(({ data: { text } }) => {
-            const matches = text.match(/\d+\.\d{2}/g);
-            if(matches) {
-                const total = Math.max(...matches.map(Number));
-                document.getElementById('entryAmount').value = total;
-                status.innerText = "Found amount: $" + total;
+        status.innerText = "Scanning... please wait.";
+        Tesseract.recognize(e.target.files[0], 'eng').then(({data:{text}}) => {
+            const m = text.match(/\d+\.\d{2}/g);
+            if(m) {
+                const found = Math.max(...m.map(Number));
+                document.getElementById('entryAmount').value = found;
+                status.innerText = "Found: R" + found;
             } else {
-                status.innerText = "Couldn't find price. Please enter manually.";
+                status.innerText = "Not found. Enter manually.";
             }
         });
-    });
+    };
 
     renderApp();
 </script>
