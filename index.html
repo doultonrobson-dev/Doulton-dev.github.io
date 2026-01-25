@@ -20,7 +20,7 @@
         .tab-btn.active-out { background: var(--out); color: white; }
         .btn-process { width: 100%; padding: 16px; background: var(--accent); color: white; border: none; border-radius: 12px; font-size: 16px; font-weight: 700; cursor: pointer; }
         .btn-sm { padding: 8px; font-size: 12px; border-radius: 6px; border: 1px solid #cbd5e1; cursor: pointer; background: white; flex: 1; }
-        #ocrStatus { font-size: 12px; font-weight: bold; margin-top: 5px; }
+        #ocrStatus { font-size: 12px; font-weight: bold; margin-top: 5px; white-space: pre-wrap; }
         table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 10px; }
         td { padding: 10px 0; border-top: 1px solid #f1f5f9; }
         .del-icon { color: #cbd5e1; cursor: pointer; padding: 5px; font-size: 16px; text-align: right; }
@@ -158,12 +158,31 @@
     document.getElementById('cameraInput').onchange = (e) => {
         const status = document.getElementById('ocrStatus'); status.innerText = "⌛ Reading...";
         Tesseract.recognize(e.target.files[0], 'eng').then(({data:{text}}) => {
+            const lines = text.toUpperCase();
+            
+            // 1. Find the Price
             const m = text.match(/\d+[\.,]\d{2}/g); 
             if(m) {
-                const found = Math.max(...m.map(n => parseFloat(n.replace(',', '.'))));
-                document.getElementById('entryAmount').value = found;
-                status.innerText = "✅ Found R" + found;
-            } else { status.innerText = "❌ Not found. Type manually."; }
+                const foundPrice = Math.max(...m.map(n => parseFloat(n.replace(',', '.'))));
+                document.getElementById('entryAmount').value = foundPrice;
+                status.innerText = "✅ Found R" + foundPrice;
+            } else {
+                status.innerText = "❌ Price not found.";
+            }
+
+            // 2. Find the Supplier
+            setEntryMode('out'); // Assume it's an expense if scanning
+            let foundSup = false;
+            sups.forEach(s => {
+                if(lines.includes(s.toUpperCase())) {
+                    document.getElementById('entrySupplier').value = s;
+                    status.innerText += "\n🏪 Supplier: " + s;
+                    foundSup = true;
+                }
+            });
+            
+            if(!foundSup) status.innerText += "\n❓ Supplier unknown. Pick manually.";
+
         });
     };
 
