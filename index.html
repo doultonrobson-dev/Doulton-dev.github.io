@@ -176,3 +176,42 @@
             const cleanText = text.toUpperCase();
             
             // 1. PRICE SCAN
+            const priceMatch = text.match(/\d+[\.,]\d{2}/g); 
+            if(priceMatch) {
+                const foundPrice = Math.max(...priceMatch.map(n => parseFloat(n.replace(',', '.'))));
+                document.getElementById('entryAmount').value = foundPrice;
+                status.innerText = "✅ Found R" + foundPrice;
+            }
+
+            // 2. SUPPLIER SCAN
+            setEntryMode('out');
+            sups.forEach(s => {
+                if(cleanText.includes(s.toUpperCase())) {
+                    document.getElementById('entrySupplier').value = s;
+                    status.innerText += "\n🏪 Supplier: " + s;
+                }
+            });
+
+            // 3. DATE SCAN (New!)
+            // Looks for DD/MM or DD-MM or DD Month
+            const dateMatch = text.match(/(\d{1,2})[\/\- ](\d{1,2}|JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)/i);
+            if(dateMatch) {
+                const d = parseInt(dateMatch[1]);
+                const mStr = dateMatch[2].toUpperCase();
+                let m = parseInt(mStr) - 1; // Convert 01 to 0 index
+                
+                // Handle text months like "JAN"
+                if(isNaN(m)) m = months.findIndex(name => name.toUpperCase() === mStr);
+
+                if(d > 0 && d <= 31) document.getElementById('entryDay').value = d;
+                if(m >= 0 && m <= 11) document.getElementById('entryMonth').value = m;
+                
+                status.innerText += `\n📅 Date Set: ${d} ${months[m] || ''}`;
+            }
+        });
+    };
+
+    renderApp();
+</script>
+</body>
+</html>
