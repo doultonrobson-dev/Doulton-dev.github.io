@@ -21,6 +21,7 @@
         .btn-process { width: 100%; padding: 16px; background: var(--accent); color: white; border: none; border-radius: 12px; font-size: 16px; font-weight: 700; cursor: pointer; }
         .btn-sm { padding: 8px; font-size: 12px; border-radius: 6px; border: 1px solid #cbd5e1; cursor: pointer; background: white; flex: 1; }
         #ocrStatus { font-size: 12px; font-weight: bold; margin-top: 5px; white-space: pre-wrap; color: var(--accent); }
+        .progress-bar { height: 4px; width: 0%; background: var(--accent); transition: width 0.3s; margin-top: 5px; border-radius: 2px; }
         table { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 10px; }
         td { padding: 10px 0; border-top: 1px solid #f1f5f9; }
         .del-icon { color: #cbd5e1; cursor: pointer; padding: 5px; font-size: 16px; text-align: right; }
@@ -48,7 +49,10 @@
     <div class="form-group">
         <label>Scan Receipt/Invoice</label>
         <input type="file" id="cameraInput" accept="image/*">
-        <div id="ocrStatus"></div>
+        <div id="ocrStatus">Ready to scan</div>
+        <div id="pBarWrap" style="background:#e2e8f0; width:100%; height:4px; margin-top:5px; display:none;">
+            <div id="pBar" class="progress-bar"></div>
+        </div>
     </div>
 
     <div class="form-group"><label>Total Amount (R)</label><input type="number" id="entryAmount" step="0.01" placeholder="0.00"></div>
@@ -88,8 +92,8 @@
 <script>
     let mode = 'in';
     let records = JSON.parse(localStorage.getItem('f_data')) || [];
-    let cats = JSON.parse(localStorage.getItem('f_cats')) || ['Salary', 'Groceries', 'Rent'];
-    let sups = JSON.parse(localStorage.getItem('f_sups')) || ['Employer', 'Checkers', 'Mosam Enterprise'];
+    let cats = JSON.parse(localStorage.getItem('f_cats')) || ['Salary', 'Groceries', 'Petrol', 'Rent'];
+    let sups = JSON.parse(localStorage.getItem('f_sups')) || ['Employer', 'Checkers', 'Woolworths', 'Shell'];
     const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 
     const monthSel = document.getElementById('entryMonth');
@@ -121,6 +125,8 @@
         });
         localStorage.setItem('f_data', JSON.stringify(records));
         document.getElementById('entryAmount').value = '';
+        document.getElementById('ocrStatus').innerText = 'Ready to scan';
+        document.getElementById('pBarWrap').style.display = 'none';
         renderApp();
         alert("Saved!");
     }
@@ -170,12 +176,38 @@
         `).join('');
     }
 
-    document.getElementById('cameraInput').onchange = (e) => {
-        const status = document.getElementById('ocrStatus'); status.innerText = "⌛ Reading...";
-        Tesseract.recognize(e.target.files[0], 'eng').then(({data:{text}}) => {
+    document.getElementById('cameraInput').onchange = async (e) => {
+        const status = document.getElementById('ocrStatus'); 
+        const bar = document.getElementById('pBar');
+        const wrap = document.getElementById('pBarWrap');
+        
+        wrap.style.display = 'block';
+        status.innerText = "⌛ Initializing...";
+        
+        const worker = await Tesseract.createWorker({
+            logger: m => {
+                if(m.status === 'recognizing text') {
+                    const prog = Math.floor(m.progress * 100);
+                    bar.style.width = prog + '%';
+                    status.innerText = `⌛ Scanning: ${prog}%`;
+                }
+            }
+        });
+
+        const timer = setTimeout(() => {
+            worker.terminate();
+            status.innerText = "❌ Stuck. Try a screenshot instead.";
+            wrap.style.display = 'none';
+        }, 25000);
+
+        try {
+            await worker.loadLanguage('eng');
+            await worker.initialize('eng');
+            const { data: { text } } = await worker.recognize(e.target.files[0]);
+            clearTimeout(timer);
             const cleanText = text.toUpperCase();
             
-            // 1. PRICE SCAN
+            // PRICE
             const priceMatch = text.match(/\d+[\.,]\d{2}/g); 
             if(priceMatch) {
                 const foundPrice = Math.max(...priceMatch.map(n => parseFloat(n.replace(',', '.'))));
@@ -183,32 +215,30 @@
                 status.innerText = "✅ Found R" + foundPrice;
             }
 
-            // 2. SUPPLIER SCAN
+            // SUPPLIER
             setEntryMode('out');
             sups.forEach(s => {
-                if(cleanText.includes(s.toUpperCase())) {
-                    document.getElementById('entrySupplier').value = s;
-                    status.innerText += "\n🏪 Supplier: " + s;
-                }
+                if(cleanText.includes(s.toUpperCase())) document.getElementById('entrySupplier').value = s;
             });
 
-            // 3. DATE SCAN (New!)
-            // Looks for DD/MM or DD-MM or DD Month
+            // DATE
             const dateMatch = text.match(/(\d{1,2})[\/\- ](\d{1,2}|JAN|FEB|MAR|APR|MAY|JUN|JUL|AUG|SEP|OCT|NOV|DEC)/i);
             if(dateMatch) {
                 const d = parseInt(dateMatch[1]);
                 const mStr = dateMatch[2].toUpperCase();
-                let m = parseInt(mStr) - 1; // Convert 01 to 0 index
-                
-                // Handle text months like "JAN"
+                let m = parseInt(mStr) - 1;
                 if(isNaN(m)) m = months.findIndex(name => name.toUpperCase() === mStr);
-
                 if(d > 0 && d <= 31) document.getElementById('entryDay').value = d;
                 if(m >= 0 && m <= 11) document.getElementById('entryMonth').value = m;
-                
-                status.innerText += `\n📅 Date Set: ${d} ${months[m] || ''}`;
             }
-        });
+
+            await worker.terminate();
+            bar.style.width = '100%';
+        } catch (err) {
+            status.innerText = "❌ Failed. Phone too slow.";
+            await worker.terminate();
+            wrap.style.display = 'none';
+        }
     };
 
     renderApp();
