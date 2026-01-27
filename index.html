@@ -31,7 +31,6 @@
         #imgModal img { max-width: 95%; max-height: 85%; border-radius: 8px; }
         .chip { background: #f1f5f9; padding: 4px 8px; border-radius: 6px; font-size: 11px; margin: 2px; display: inline-flex; align-items: center; gap: 5px; }
         .chip-del { color: var(--out); font-weight: bold; cursor: pointer; }
-        .toggle-wrap { display: flex; align-items: center; gap: 10px; font-size: 12px; font-weight: bold; }
     </style>
 </head>
 <body>
@@ -54,26 +53,25 @@
     </div>
 
     <div class="form-group">
-        <label>Scan Receipt/Screenshot</label>
+        <label>Scan Slip / Screenshot</label>
         <input type="file" id="cameraInput" accept="image/*">
-        <div id="ocrStatus">Ready to scan</div>
+        <div id="ocrStatus">Ready</div>
         <div id="pBarWrap" style="background:#e2e8f0; width:100%; height:4px; margin-top:5px; display:none;">
             <div id="pBar" class="progress-bar"></div>
         </div>
-        <div class="toggle-wrap" style="margin-top:10px;">
-            <input type="checkbox" id="storeImgToggle" checked style="width:20px; height:20px;">
-            <span>SAVE SLIP IMAGE TO HISTORY</span>
+        <div style="margin-top:10px; font-size:12px;">
+            <input type="checkbox" id="storeImgToggle" checked> Save Image
         </div>
     </div>
 
-    <div class="form-group"><label>Total Amount (R)</label><input type="number" id="entryAmount" step="0.01" placeholder="0.00"></div>
+    <div class="form-group"><label>Amount (R)</label><input type="number" id="entryAmount" step="0.01"></div>
     
     <div id="outOnlyFields" style="display:none;">
         <div class="form-group"><label>Category</label><select id="entryCategory"></select></div>
         <div class="form-group"><label>Supplier</label><select id="entrySupplier"></select></div>
     </div>
     
-    <button class="btn-process" onclick="processEntry()">PROCESS DATA</button>
+    <button class="btn-process" onclick="processEntry()">SAVE TRANSACTION</button>
 </div>
 
 <div class="card">
@@ -81,20 +79,20 @@
     <table><tbody id="historyBody"></tbody></table>
 </div>
 
+<div class="card">
+    <button class="btn-export" onclick="exportData()">💾 DOWNLOAD EXCEL (CSV)</button>
+    <button class="btn-sm" style="width:100%; margin-top:10px; color:var(--out);" onclick="clearAllData()">🗑️ DELETE ALL DATA</button>
+</div>
+
 <div class="card" style="border: 2px solid var(--accent);">
-    <h3 style="color: var(--accent);">Manage & Backup</h3>
-    <div class="form-group">
-        <label>Add New Menu Item</label>
-        <div class="flex-row">
-            <input type="text" id="newItemName" placeholder="Name...">
-            <button class="btn-sm" onclick="addItem('cats')">+ Cat</button>
-            <button class="btn-sm" onclick="addItem('sups')">+ Sup</button>
-        </div>
+    <label>Manage Menu Items</label>
+    <div class="flex-row">
+        <input type="text" id="newItemName" placeholder="Name...">
+        <button class="btn-sm" onclick="addItem('cats')">+ Cat</button>
+        <button class="btn-sm" onclick="addItem('sups')">+ Sup</button>
     </div>
-    <div id="listCats" style="margin-bottom: 10px;"></div>
-    <div id="listSups" style="margin-bottom: 15px;"></div>
-    <hr>
-    <button class="btn-export" onclick="exportData()">💾 DOWNLOAD DATA BACKUP</button>
+    <div id="listCats"></div><br>
+    <div id="listSups"></div>
 </div>
 
 <script>
@@ -105,13 +103,18 @@
     let sups = JSON.parse(localStorage.getItem('f_sups')) || ['Employer', 'Checkers', 'Shell'];
     const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 
-    const monthSel = document.getElementById('entryMonth');
-    months.forEach((m, i) => monthSel.innerHTML += `<option value="${i}">${m}</option>`);
-    monthSel.value = new Date().getMonth();
+    // Initialization
+    function initSelectors() {
+        const mSel = document.getElementById('entryMonth');
+        mSel.innerHTML = months.map((m, i) => `<option value="${i}">${m}</option>`).join('');
+        mSel.value = new Date().getMonth();
 
-    const daySel = document.getElementById('entryDay');
-    for(let i=1; i<=31; i++) daySel.innerHTML += `<option value="${i}">${i}</option>`;
-    daySel.value = new Date().getDate();
+        const dSel = document.getElementById('entryDay');
+        dSel.innerHTML = Array.from({length: 31}, (_, i) => `<option value="${i+1}">${i+1}</option>`).join('');
+        dSel.value = new Date().getDate();
+        
+        renderApp();
+    }
 
     function setEntryMode(m) {
         mode = m;
@@ -124,68 +127,53 @@
         const amt = parseFloat(document.getElementById('entryAmount').value);
         if(!amt) return alert("Enter amount");
         
-        const saveImg = document.getElementById('storeImgToggle').checked;
+        const cat = mode === 'out' ? document.getElementById('entryCategory').value : 'Income';
+        const sup = mode === 'out' ? document.getElementById('entrySupplier').value : 'N/A';
 
         records.push({
             id: Date.now(), type: mode, 
             month: parseInt(document.getElementById('entryMonth').value), 
             day: parseInt(document.getElementById('entryDay').value),
-            amount: amt, 
-            category: mode === 'out' ? document.getElementById('entryCategory').value : 'Income',
-            supplier: mode === 'out' ? document.getElementById('entrySupplier').value : 'N/A',
-            img: saveImg ? currentImgBase64 : null,
+            amount: amt, category: cat, supplier: sup,
+            img: document.getElementById('storeImgToggle').checked ? currentImgBase64 : null,
             timestamp: Date.now()
         });
         
-        saveAndRender();
+        // SMART MEMORY: Save choices for next time
+        localStorage.setItem('last_cat', cat);
+        localStorage.setItem('last_sup', sup);
+
+        localStorage.setItem('f_data', JSON.stringify(records));
+        
+        // Reset only amount and image
         document.getElementById('entryAmount').value = '';
         currentImgBase64 = null;
-        document.getElementById('ocrStatus').innerText = 'Ready to scan';
+        document.getElementById('ocrStatus').innerText = 'Ready';
         document.getElementById('pBarWrap').style.display = 'none';
-    }
-
-    function saveAndRender() {
-        try {
-            localStorage.setItem('f_data', JSON.stringify(records));
-        } catch(e) {
-            alert("Storage full! Deleting old images.");
-            records.find(r => r.img !== null).img = null;
-            localStorage.setItem('f_data', JSON.stringify(records));
-        }
+        
         renderApp();
-    }
-
-    function viewImg(id) {
-        const rec = records.find(r => r.id === id);
-        if(rec && rec.img) {
-            document.getElementById('modalImg').src = rec.img;
-            document.getElementById('imgModal').style.display = 'flex';
-        }
-    }
-
-    function exportData() {
-        const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(records));
-        const downloadAnchorNode = document.createElement('a');
-        downloadAnchorNode.setAttribute("href", dataStr);
-        downloadAnchorNode.setAttribute("download", "finance_backup.json");
-        document.body.appendChild(downloadAnchorNode);
-        downloadAnchorNode.click();
-        downloadAnchorNode.remove();
+        alert("Saved!");
     }
 
     function renderApp() {
+        // Build Selectors
         document.getElementById('entryCategory').innerHTML = cats.map(c => `<option>${c}</option>`).join('');
         document.getElementById('entrySupplier').innerHTML = sups.map(s => `<option>${s}</option>`).join('');
+        
+        // Apply Smart Memory
+        if(localStorage.getItem('last_cat')) document.getElementById('entryCategory').value = localStorage.getItem('last_cat');
+        if(localStorage.getItem('last_sup')) document.getElementById('entrySupplier').value = localStorage.getItem('last_sup');
+
         document.getElementById('listCats').innerHTML = cats.map((c, i) => `<span class="chip">${c} <span class="chip-del" onclick="removeItem('cats', ${i})">×</span></span>`).join('');
         document.getElementById('listSups').innerHTML = sups.map((s, i) => `<span class="chip">${s} <span class="chip-del" onclick="removeItem('sups', ${i})">×</span></span>`).join('');
 
         const q = document.getElementById('searchInput').value.toLowerCase();
-        let displayList = q ? records.filter(r => r.supplier.toLowerCase().includes(q) || r.category.toLowerCase().includes(q)) : [...records].sort((a,b) => b.timestamp - a.timestamp).slice(0, 15);
+        let displayList = q ? records.filter(r => r.supplier.toLowerCase().includes(q) || r.category.toLowerCase().includes(q)) : [...records].sort((a,b) => b.timestamp - a.timestamp).slice(0, 10);
         
         document.getElementById('historyBody').innerHTML = displayList.map(r => `
             <tr>
                 <td>${r.day} ${months[r.month]}</td>
-                <td>${r.supplier !== 'N/A' ? r.supplier : r.category}</td>
+                <td>${r.supplier}</td>
                 <td style="color:${r.type=='in'?'var(--in)':'var(--out)'}">R${r.amount.toFixed(2)}</td>
                 <td>${r.img ? `<button class="view-btn" onclick="viewImg(${r.id})">VIEW</button>` : ''}</td>
                 <td class="del-icon" onclick="deleteRecord(${r.id})">🗑️</td>
@@ -193,19 +181,36 @@
         `).join('');
     }
 
+    function exportData() {
+        if (records.length === 0) return alert("No data");
+        let csv = "Date,Type,Supplier,Category,Amount\n";
+        records.forEach(r => csv += `${r.day} ${months[r.month]},${r.type.toUpperCase()},${r.supplier},${r.category},${r.amount.toFixed(2)}\n`);
+        const blob = new Blob([csv], { type: 'text/csv' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url; a.download = `Report_${months[new Date().getMonth()]}.csv`;
+        a.click();
+    }
+
+    function clearAllData() {
+        if(confirm("Wipe everything? This cannot be undone!")) {
+            records = [];
+            localStorage.setItem('f_data', JSON.stringify(records));
+            renderApp();
+        }
+    }
+
     async function resizeImage(file) {
-        return new Promise((resolve) => {
+        return new Promise((res) => {
             const reader = new FileReader();
             reader.onload = (e) => {
                 const img = new Image();
                 img.onload = () => {
                     const canvas = document.createElement('canvas');
                     const scale = 400 / img.width;
-                    canvas.width = 400;
-                    canvas.height = img.height * scale;
-                    const ctx = canvas.getContext('2d');
-                    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-                    resolve(canvas.toDataURL('image/jpeg', 0.5));
+                    canvas.width = 400; canvas.height = img.height * scale;
+                    canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+                    res(canvas.toDataURL('image/jpeg', 0.5));
                 };
                 img.src = e.target.result;
             };
@@ -214,52 +219,56 @@
     }
 
     document.getElementById('cameraInput').onchange = async (e) => {
-        const file = e.target.files[0];
-        if(!file) return;
+        const file = e.target.files[0]; if(!file) return;
         currentImgBase64 = await resizeImage(file);
-        const status = document.getElementById('ocrStatus'); 
+        const status = document.getElementById('ocrStatus');
         const bar = document.getElementById('pBar');
-        const wrap = document.getElementById('pBarWrap');
-        wrap.style.display = 'block';
+        document.getElementById('pBarWrap').style.display = 'block';
+        
         const worker = await Tesseract.createWorker({
             logger: m => { if(m.status === 'recognizing text') bar.style.width = Math.floor(m.progress * 100) + '%'; }
         });
+
         try {
             await worker.loadLanguage('eng');
             await worker.initialize('eng');
             const { data: { text } } = await worker.recognize(file);
-            const priceMatch = text.match(/\d+[\.,]\d{2}/g); 
-            if(priceMatch) document.getElementById('entryAmount').value = Math.max(...priceMatch.map(n => parseFloat(n.replace(',', '.'))));
+            const m = text.match(/\d+[\.,]\d{2}/g);
+            if(m) document.getElementById('entryAmount').value = Math.max(...m.map(n => parseFloat(n.replace(',','.'))));
+            
+            // Auto-detect supplier from scan
             sups.forEach(s => { if(text.toUpperCase().includes(s.toUpperCase())) document.getElementById('entrySupplier').value = s; });
+            
             status.innerText = "✅ Scan Complete";
             await worker.terminate();
-        } catch (err) {
-            status.innerText = "❌ OCR Failed";
-            await worker.terminate();
-        }
+        } catch (err) { status.innerText = "❌ Scan Failed"; await worker.terminate(); }
     };
 
+    function viewImg(id) {
+        const r = records.find(x => x.id === id);
+        if(r && r.img) { document.getElementById('modalImg').src = r.img; document.getElementById('imgModal').style.display = 'flex'; }
+    }
+
     function addItem(type) {
-        const name = document.getElementById('newItemName').value.trim();
-        if(!name) return;
-        if(type === 'cats') cats.push(name); else sups.push(name);
-        localStorage.setItem('f_' + (type==='cats'?'cats':'sups'), JSON.stringify(type==='cats'?cats:sups));
+        const val = document.getElementById('newItemName').value.trim();
+        if(!val) return;
+        if(type==='cats') cats.push(val); else sups.push(val);
+        localStorage.setItem('f_'+type, JSON.stringify(type==='cats'?cats:sups));
         document.getElementById('newItemName').value = '';
         renderApp();
     }
-    function removeItem(type, index) {
-        if(type === 'cats') cats.splice(index, 1); else sups.splice(index, 1);
-        localStorage.setItem('f_' + type, JSON.stringify(type === 'cats' ? cats : sups));
+
+    function removeItem(type, idx) {
+        if(type==='cats') cats.splice(idx, 1); else sups.splice(idx, 1);
+        localStorage.setItem('f_'+type, JSON.stringify(type==='cats'?cats:sups));
         renderApp();
     }
+
     function deleteRecord(id) {
-        if(confirm("Delete?")) {
-            records = records.filter(r => r.id !== id);
-            localStorage.setItem('f_data', JSON.stringify(records));
-            renderApp();
-        }
+        if(confirm("Delete?")) { records = records.filter(r => r.id !== id); localStorage.setItem('f_data', JSON.stringify(records)); renderApp(); }
     }
-    renderApp();
+
+    initSelectors();
 </script>
 </body>
 </html>
