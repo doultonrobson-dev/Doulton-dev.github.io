@@ -18,18 +18,17 @@
         .mini-table td { padding: 12px 8px; border-bottom: 1px solid #f1f5f9; }
         .date-col { color: #64748b; font-weight: 600; font-size: 11px; width: 60px; }
         .del-btn { color: #cbd5e1; text-align: right; width: 30px; }
-        .year-indicator { text-align: center; font-size: 12px; font-weight: bold; color: var(--accent); margin-bottom: 10px; text-transform: uppercase; }
     </style>
 </head>
 <body>
 
 <div class="search-header">
-    <input type="text" id="searchInput" placeholder="🔍 Search Suppliers in this year..." onkeyup="renderApp()">
+    <input type="text" id="searchInput" placeholder="🔍 Search Supplier..." onkeyup="renderApp()">
 </div>
 
 <div class="card">
     <div style="display:flex; gap:10px;">
-        <div style="flex:1"><label>Year</label><select id="entryYear" onchange="renderApp()"></select></div>
+        <div style="flex:1"><label>Year</label><select id="entryYear"></select></div>
         <div style="flex:1.5"><label>Month</label><select id="entryMonth"></select></div>
         <div style="flex:1"><label>Day</label><select id="entryDay"></select></div>
     </div>
@@ -45,7 +44,6 @@
     <button class="btn-process" onclick="processEntry()">SAVE TRANSACTION</button>
 </div>
 
-<div class="year-indicator" id="viewingYearText"></div>
 <div id="historyContainer"></div>
 
 <script>
@@ -57,8 +55,7 @@
     function init() {
         const yearSel = document.getElementById('entryYear');
         const currentYear = new Date().getFullYear();
-        // Range: 2024 to 2028
-        for(let i = 2024; i <= 2028; i++) {
+        for(let i = currentYear - 2; i <= currentYear + 2; i++) {
             yearSel.innerHTML += `<option value="${i}">${i}</option>`;
         }
         yearSel.value = currentYear;
@@ -94,38 +91,29 @@
         document.getElementById('entryCategory').innerHTML = cats.map(c=>`<option>${c}</option>`).join('');
         document.getElementById('entrySupplier').innerHTML = sups.map(s=>`<option>${s}</option>`).join('');
 
-        const selectedYear = parseInt(document.getElementById('entryYear').value);
-        document.getElementById('viewingYearText').innerText = `Viewing Records for ${selectedYear}`;
-        
         const container = document.getElementById('historyContainer');
         container.innerHTML = '';
 
-        // 1. FILTER by Selected Year FIRST
-        let filteredByYear = records.filter(r => r.year === selectedYear);
-
-        // 2. SORT: Supplier -> Day
-        let sorted = filteredByYear.sort((a, b) => {
+        // SORT: Year -> Supplier -> Day
+        let sorted = [...records].sort((a, b) => {
+            if (a.year !== b.year) return b.year - a.year; // Newest year first
             if (a.supplier !== b.supplier) return a.supplier.localeCompare(b.supplier);
             return a.day - b.day;
         });
 
-        // 3. SEARCH FILTER (optional)
         const q = document.getElementById('searchInput').value.toLowerCase();
         if(q) sorted = sorted.filter(r => r.supplier.toLowerCase().includes(q));
 
-        if(sorted.length === 0) {
-            container.innerHTML = '<div style="text-align:center; padding:20px; color:#94a3b8; font-size:12px;">No records found for this year.</div>';
-            return;
-        }
-
-        let currentSup = ""; 
+        let currentGroupKey = ""; 
         let supTotal = 0;
         let groupBuffer = "";
 
         sorted.forEach((r, index) => {
-            if (r.supplier !== currentSup) {
-                if (currentSup !== "") flushGroup(currentSup, supTotal, groupBuffer);
-                currentSup = r.supplier;
+            const groupKey = `${r.year}-${r.supplier}`;
+            
+            if (groupKey !== currentGroupKey) {
+                if (currentGroupKey !== "") flushGroup(currentGroupKey, supTotal, groupBuffer);
+                currentGroupKey = groupKey;
                 supTotal = 0;
                 groupBuffer = "";
             }
@@ -140,15 +128,16 @@
                 </tr>
             `;
 
-            if (index === sorted.length - 1) flushGroup(currentSup, supTotal, groupBuffer);
+            if (index === sorted.length - 1) flushGroup(currentGroupKey, supTotal, groupBuffer);
         });
     }
 
-    function flushGroup(name, total, html) {
+    function flushGroup(key, total, html) {
+        const [year, name] = key.split('-');
         const container = document.getElementById('historyContainer');
         container.innerHTML += `
             <div class="group-header">
-                <span>${name.toUpperCase()}</span>
+                <span>${name.toUpperCase()} (${year})</span>
                 <span>TOTAL: R${total.toFixed(2)}</span>
             </div>
             <table class="mini-table">${html}</table>
