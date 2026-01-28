@@ -17,20 +17,33 @@
         .tab-btn.active-in { background: var(--in); color: white; }
         .tab-btn.active-out { background: var(--out); color: white; }
         .btn-process { width: 100%; padding: 15px; background: var(--accent); color: white; border: none; border-radius: 10px; font-size: 16px; font-weight: 700; cursor: pointer; }
-        .summary-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px; }
-        .s-card { padding: 12px; border-radius: 10px; background: #fff; border-left: 4px solid #cbd5e1; box-shadow: 0 2px 5px rgba(0,0,0,0.03); }
-        .s-card b { display: block; font-size: 15px; }
+        
+        /* Stats Dashboard */
+        .stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 10px; }
+        .stat-item { background: #fff; border: 1px solid #e2e8f0; padding: 10px; border-radius: 10px; text-align: center; }
+        .stat-item small { font-size: 9px; color: #64748b; display: block; text-transform: uppercase; }
+        .stat-item strong { font-size: 14px; color: var(--accent); }
+        
         .group-header { background: #f1f5f9; padding: 8px 12px; margin-top: 15px; border-radius: 6px; font-size: 11px; font-weight: bold; color: var(--accent); display: flex; justify-content: space-between; }
         .mini-table { width: 100%; border-collapse: collapse; font-size: 13px; }
         .mini-table td { padding: 12px 5px; border-bottom: 1px solid #f1f5f9; }
         .chip { display: inline-block; background: #e2e8f0; padding: 4px 8px; border-radius: 15px; font-size: 11px; margin: 2px; }
-        .chip span { margin-left: 6px; color: var(--out); font-weight: bold; }
     </style>
 </head>
 <body>
 
 <div class="search-header">
     <input type="text" id="searchInput" placeholder="🔍 Search Suppliers..." onkeyup="renderApp()">
+</div>
+
+<div class="card" style="background: #eff6ff; border: 1px solid #dbeafe;">
+    <label id="dashTitle">2026 PERFORMANCE</label>
+    <div class="stat-grid">
+        <div class="stat-item"><small>Avg. Spend/mo</small><strong id="avgSpend">R0</strong></div>
+        <div class="stat-item"><small>Best Savings Mo</small><strong id="bestMonth">None</strong></div>
+        <div class="stat-item"><small>Month In</small><strong id="statIn" style="color:var(--in)">R0</strong></div>
+        <div class="stat-item"><small>Month Out</small><strong id="statOut" style="color:var(--out)">R0</strong></div>
+    </div>
 </div>
 
 <div class="card">
@@ -64,15 +77,10 @@
     <button class="btn-process" onclick="processEntry()">SAVE TRANSACTION</button>
 </div>
 
-<div class="summary-grid">
-    <div class="s-card" style="border-left-color: var(--in);"><span>In</span><b id="statIn">R0.00</b></div>
-    <div class="s-card" style="border-left-color: var(--out);"><span>Out</span><b id="statOut">R0.00</b></div>
-</div>
-
 <div id="historyContainer"></div>
 
 <div class="card" style="margin-top:30px; border-top: 4px solid var(--accent);">
-    <label>Manage Lists & Tools</label>
+    <label>Manage Lists</label>
     <div style="display:flex; gap:5px; margin-bottom:15px;">
         <input type="text" id="newLabelName" placeholder="New name..." style="flex:2; padding:8px;">
         <button onclick="addListItem('sups')" style="flex:1; background:var(--accent); color:white; border:none; border-radius:8px; font-size:10px;">+ SHOP</button>
@@ -135,10 +143,31 @@
 
         const selY = parseInt(document.getElementById('entryYear').value);
         const selM = parseInt(document.getElementById('entryMonth').value);
-        const filtered = records.filter(r => r.year === selY && r.month === selM);
+        document.getElementById('dashTitle').innerText = `${selY} PERFORMANCE`;
+
+        // ANNUAL CALCULATIONS
+        const yearRecords = records.filter(r => r.year === selY);
+        let monthTotals = Array(12).fill(0).map(() => ({ in: 0, out: 0 }));
+        yearRecords.forEach(r => {
+            if(r.type === 'in') monthTotals[r.month].in += r.amount;
+            else monthTotals[r.month].out += r.amount;
+        });
+        const totalYearOut = monthTotals.reduce((s, m) => s + m.out, 0);
+        const activeMonths = monthTotals.filter(m => m.in > 0 || m.out > 0).length || 1;
         
-        document.getElementById('statIn').innerText = `R${filtered.filter(r=>r.type==='in').reduce((s,r)=>s+r.amount,0).toFixed(2)}`;
-        document.getElementById('statOut').innerText = `R${filtered.filter(r=>r.type==='out').reduce((s,r)=>s+r.amount,0).toFixed(2)}`;
+        let bestVal = -Infinity; let bestMo = "None";
+        monthTotals.forEach((m, i) => {
+            let surplus = m.in - m.out;
+            if((m.in > 0 || m.out > 0) && surplus > bestVal) { bestVal = surplus; bestMo = months[i]; }
+        });
+
+        document.getElementById('avgSpend').innerText = `R${(totalYearOut / activeMonths).toFixed(0)}`;
+        document.getElementById('bestMonth').innerText = bestMo;
+
+        // MONTHLY CALCULATIONS
+        const filtered = yearRecords.filter(r => r.month === selM);
+        document.getElementById('statIn').innerText = `R${filtered.filter(r=>r.type==='in').reduce((s,r)=>s+r.amount,0).toFixed(0)}`;
+        document.getElementById('statOut').innerText = `R${filtered.filter(r=>r.type==='out').reduce((s,r)=>s+r.amount,0).toFixed(0)}`;
 
         const container = document.getElementById('historyContainer');
         container.innerHTML = '';
@@ -153,7 +182,7 @@
                 currentSup = r.supplier; supTotal = 0; buffer = "";
             }
             supTotal += r.amount;
-            buffer += `<tr><td>${r.day} ${months[r.month]}</td><td style="color:#64748b">${r.category}</td><td style="text-align:right; font-weight:bold; color:${r.type==='in'?'var(--in)':'var(--text)'}">R${r.amount.toFixed(2)}</td><td style="text-align:right" onclick="deleteRec(${r.id})">🗑️</td></tr>`;
+            buffer += `<tr><td>${r.day} ${months[r.month]}</td><td>${r.category}</td><td style="text-align:right; font-weight:bold; color:${r.type==='in'?'var(--in)':'var(--text)'}">R${r.amount.toFixed(2)}</td><td style="text-align:right" onclick="deleteRec(${r.id})">🗑️</td></tr>`;
             if(i === sorted.length - 1) flush(currentSup, supTotal, buffer);
         });
     }
@@ -171,9 +200,11 @@
     }
 
     function removeListItem(type, i) {
-        if(type==='cats') cats.splice(i,1); else sups.splice(i,1);
-        localStorage.setItem('f_'+type, JSON.stringify(type==='cats'?cats:sups));
-        renderApp();
+        if(confirm("Remove?")) {
+            if(type==='cats') cats.splice(i,1); else sups.splice(i,1);
+            localStorage.setItem('f_'+type, JSON.stringify(type==='cats'?cats:sups));
+            renderApp();
+        }
     }
 
     document.getElementById('cameraInput').onchange = async (e) => {
