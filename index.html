@@ -10,119 +10,91 @@
         body { font-family: -apple-system, sans-serif; background: var(--bg); color: var(--text); padding: 15px; margin: 0; padding-top: 70px; }
         .search-header { position: fixed; top: 0; left: 0; right: 0; background: white; padding: 12px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); z-index: 100; }
         .card { background: white; padding: 15px; border-radius: 12px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); margin-bottom: 15px; }
-        .flex-row { display: flex; gap: 8px; margin-bottom: 10px; align-items: center; }
-        .form-group { margin-bottom: 12px; }
         label { display: block; font-size: 10px; color: #64748b; text-transform: uppercase; font-weight: 700; margin-bottom: 4px; }
-        select, input { width: 100%; padding: 10px; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 16px; box-sizing: border-box; }
-        .tab-group { display: flex; background: #e2e8f0; padding: 4px; border-radius: 10px; margin-bottom: 15px; }
-        .tab-btn { flex: 1; padding: 8px; border: none; border-radius: 6px; cursor: pointer; font-weight: 600; color: #64748b; }
-        .tab-btn.active-in { background: var(--in); color: white; }
-        .tab-btn.active-out { background: var(--out); color: white; }
+        select, input { width: 100%; padding: 12px; border: 1px solid #e2e8f0; border-radius: 8px; font-size: 16px; box-sizing: border-box; margin-bottom: 10px; }
         .btn-process { width: 100%; padding: 14px; background: var(--accent); color: white; border: none; border-radius: 10px; font-size: 16px; font-weight: 700; cursor: pointer; }
         .summary-box { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px; }
         .s-card { padding: 10px; border-radius: 8px; background: #f8fafc; border-left: 4px solid #cbd5e1; }
         .s-card b { display: block; font-size: 14px; }
         .s-card span { font-size: 9px; color: #64748b; text-transform: uppercase; }
-        .mini-table { width: 100%; font-size: 12px; border-collapse: collapse; }
-        .mini-table td { padding: 4px 0; border-bottom: 1px solid #f1f5f9; }
-        .mini-table td:last-child { text-align: right; font-weight: bold; }
-        .stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 10px; }
-        .stat-item { background: #fff; border: 1px solid #e2e8f0; padding: 8px; border-radius: 8px; text-align: center; }
-        .stat-item small { font-size: 9px; color: #64748b; display: block; }
-        .stat-item strong { font-size: 13px; color: var(--accent); }
+        .group-header { background: #e2e8f0; padding: 8px 12px; margin-top: 15px; border-radius: 6px; font-size: 11px; font-weight: 800; display: flex; justify-content: space-between; color: #475569; }
+        .mini-table { width: 100%; font-size: 13px; border-collapse: collapse; background: white; }
+        .mini-table td { padding: 10px 8px; border-bottom: 1px solid #f1f5f9; }
+        .date-col { color: #64748b; font-weight: 600; font-size: 11px; width: 60px; }
     </style>
 </head>
 <body>
 
 <div class="search-header">
-    <input type="text" id="searchInput" placeholder="🔍 Search records..." onkeyup="renderApp()">
+    <input type="text" id="searchInput" placeholder="🔍 Search Suppliers..." onkeyup="renderApp()">
 </div>
 
 <div class="card">
-    <div class="tab-group">
-        <button id="tabIn" class="tab-btn active-in" onclick="setEntryMode('in')">Money In</button>
-        <button id="tabOut" class="tab-btn" onclick="setEntryMode('out')">Money Out</button>
+    <div style="display:flex; gap:10px;">
+        <div style="flex:1"><label>Year</label><select id="entryYear" onchange="renderApp()"></select></div>
+        <div style="flex:1.5"><label>Month</label><select id="entryMonth" onchange="renderApp()"></select></div>
+        <div style="flex:1"><label>Day</label><select id="entryDay"></select></div>
     </div>
     
-    <div class="flex-row">
-        <div class="form-group" style="flex: 2;"><label>Month</label><select id="entryMonth"></select></div>
-        <div class="form-group" style="flex: 1;"><label>Day</label><select id="entryDay"></select></div>
-    </div>
-
-    <div class="form-group">
-        <label>Scan Receipt</label>
-        <input type="file" id="cameraInput" accept="image/*">
-        <div id="ocrStatus" style="font-size:11px; font-weight:bold; color:var(--accent);">Ready</div>
-    </div>
-
-    <div class="form-group"><label>Amount (R)</label><input type="number" id="entryAmount" step="0.01"></div>
+    <label>Amount (R)</label>
+    <input type="number" id="entryAmount" inputmode="decimal" placeholder="0.00">
     
-    <div id="outOnlyFields" style="display:none;">
-        <div class="form-group"><label>Category</label><select id="entryCategory"></select></div>
-        <div class="form-group"><label>Supplier</label><select id="entrySupplier"></select></div>
+    <div style="display:flex; gap:10px;">
+        <div style="flex:1"><label>Supplier</label><select id="entrySupplier"></select></div>
+        <div style="flex:1"><label>Category</label><select id="entryCategory"></select></div>
     </div>
     
     <button class="btn-process" onclick="processEntry()">SAVE TRANSACTION</button>
 </div>
 
 <div class="card">
-    <label>Monthly Breakdown</label>
+    <label id="statsTitle">Insights</label>
     <div class="summary-box">
-        <div class="s-card" style="border-left-color: var(--in);"><span>In</span><b id="statIn">R0</b></div>
-        <div class="s-card" style="border-left-color: var(--out);"><span>Out</span><b id="statOut">R0</b></div>
+        <div class="s-card" style="border-left-color: var(--in);"><span>Month In</span><b id="statIn">R0</b></div>
+        <div class="s-card" style="border-left-color: var(--out);"><span>Month Out</span><b id="statOut">R0</b></div>
     </div>
-    <div class="flex-row" style="align-items: flex-start;">
-        <div style="flex:1"><label>Shops</label><table class="mini-table" id="shopBreakdown"></table></div>
-        <div style="flex:1"><label>Categories</label><table class="mini-table" id="catBreakdown"></table></div>
-    </div>
+    <div style="font-size: 11px; color: #64748b; margin-top: 5px;" id="shopSpendingSummary"></div>
 </div>
 
-<div class="card" style="background: #f8fafc; border: 1px solid #e2e8f0;">
-    <label>Annual Performance (2026)</label>
-    <div class="stat-grid">
-        <div class="stat-item"><small>Avg. Spend/mo</small><strong id="avgSpend">R0</strong></div>
-        <div class="stat-item"><small>Best Savings Mo</small><strong id="bestMonth">None</strong></div>
-        <div class="stat-item"><small>Highest Spend Mo</small><strong id="worstMonth">None</strong></div>
-        <div class="stat-item"><small>Total Yearly Out</small><strong id="yearTotal">R0</strong></div>
-    </div>
-</div>
-
-<div class="card">
-    <label>Recent History</label>
-    <table class="mini-table" id="historyTable"></table>
-    <button class="btn-process" style="background:#1e293b; margin-top:15px; padding:10px; font-size:12px;" onclick="exportCSV()">💾 DOWNLOAD CSV</button>
-</div>
+<div id="historyContainer"></div>
 
 <script>
-    let mode = 'in';
     let records = JSON.parse(localStorage.getItem('f_data')) || [];
-    let cats = JSON.parse(localStorage.getItem('f_cats')) || ['Salary', 'Groceries', 'Rent', 'Petrol'];
-    let sups = JSON.parse(localStorage.getItem('f_sups')) || ['Employer', 'Checkers', 'Shell', 'Landlord'];
+    let cats = JSON.parse(localStorage.getItem('f_cats')) || ['Groceries', 'Petrol', 'Salary', 'Rent'];
+    let sups = JSON.parse(localStorage.getItem('f_sups')) || ['Checkers', 'Shell', 'Employer', 'Woolworths'];
     const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
 
     function init() {
+        const yearSel = document.getElementById('entryYear');
+        const curY = new Date().getFullYear();
+        for(let i = 2024; i <= 2028; i++) yearSel.innerHTML += `<option value="${i}">${i}</option>`;
+        yearSel.value = curY;
+
         document.getElementById('entryMonth').innerHTML = months.map((m,i)=>`<option value="${i}">${m}</option>`).join('');
         document.getElementById('entryMonth').value = new Date().getMonth();
+        
         document.getElementById('entryDay').innerHTML = Array.from({length:31},(_,i)=>`<option value="${i+1}">${i+1}</option>`).join('');
         document.getElementById('entryDay').value = new Date().getDate();
+        
         renderApp();
-    }
-
-    function setEntryMode(m) {
-        mode = m;
-        document.getElementById('tabIn').className = m==='in'?'tab-btn active-in':'tab-btn';
-        document.getElementById('tabOut').className = m==='out'?'tab-btn active-out':'tab-btn';
-        document.getElementById('outOnlyFields').style.display = m==='out'?'block':'none';
     }
 
     function processEntry() {
         const amt = parseFloat(document.getElementById('entryAmount').value);
-        if(!amt) return alert("Enter amount");
-        const cat = mode==='out'?document.getElementById('entryCategory').value:'Income';
-        const sup = mode==='out'?document.getElementById('entrySupplier').value:'N/A';
-        records.push({ id: Date.now(), type: mode, month: parseInt(document.getElementById('entryMonth').value), day: parseInt(document.getElementById('entryDay').value), amount: amt, category: cat, supplier: sup, timestamp: Date.now() });
+        if(!amt) return;
+
+        records.push({
+            id: Date.now(),
+            year: parseInt(document.getElementById('entryYear').value),
+            month: parseInt(document.getElementById('entryMonth').value),
+            day: parseInt(document.getElementById('entryDay').value),
+            amount: amt,
+            supplier: document.getElementById('entrySupplier').value,
+            category: document.getElementById('entryCategory').value,
+            type: document.getElementById('entryCategory').value === 'Salary' ? 'in' : 'out'
+        });
+
         localStorage.setItem('f_data', JSON.stringify(records));
-        localStorage.setItem('last_cat', cat); localStorage.setItem('last_sup', sup);
         document.getElementById('entryAmount').value = '';
         renderApp();
     }
@@ -130,87 +102,38 @@
     function renderApp() {
         document.getElementById('entryCategory').innerHTML = cats.map(c=>`<option>${c}</option>`).join('');
         document.getElementById('entrySupplier').innerHTML = sups.map(s=>`<option>${s}</option>`).join('');
-        if(localStorage.getItem('last_cat')) document.getElementById('entryCategory').value = localStorage.getItem('last_cat');
-        if(localStorage.getItem('last_sup')) document.getElementById('entrySupplier').value = localStorage.getItem('last_sup');
 
-        const curM = parseInt(document.getElementById('entryMonth').value);
-        const curMonthRecords = records.filter(r => r.month === curM);
+        const selY = parseInt(document.getElementById('entryYear').value);
+        const selM = parseInt(document.getElementById('entryMonth').value);
         
-        // Monthly Stats
-        const tin = curMonthRecords.filter(r=>r.type==='in').reduce((s,r)=>s+r.amount,0);
-        const tout = curMonthRecords.filter(r=>r.type==='out').reduce((s,r)=>s+r.amount,0);
+        document.getElementById('statsTitle').innerText = `${months[selM]} ${selY} Insights`;
+
+        // 1. Filter by Year & Month for Stats
+        const filteredRecords = records.filter(r => r.year === selY && r.month === selM);
+
+        // 2. Calculate Stats
+        const tin = filteredRecords.filter(r => r.type === 'in').reduce((s, r) => s + r.amount, 0);
+        const tout = filteredRecords.filter(r => r.type === 'out').reduce((s, r) => s + r.amount, 0);
+        
         document.getElementById('statIn').innerText = `R${tin.toFixed(2)}`;
         document.getElementById('statOut').innerText = `R${tout.toFixed(2)}`;
 
-        // Breakdown Logic
-        const shopData = {}; const catData = {};
-        curMonthRecords.filter(r=>r.type==='out').forEach(r => {
-            shopData[r.supplier] = (shopData[r.supplier] || 0) + r.amount;
-            catData[r.category] = (catData[r.category] || 0) + r.amount;
+        // 3. Render Grouped History (Sorted by Supplier then Date)
+        const container = document.getElementById('historyContainer');
+        container.innerHTML = '';
+
+        let sorted = filteredRecords.sort((a, b) => {
+            if (a.supplier !== b.supplier) return a.supplier.localeCompare(b.supplier);
+            return a.day - b.day;
         });
-        document.getElementById('shopBreakdown').innerHTML = Object.entries(shopData).sort((a,b)=>b[1]-a[1]).slice(0,5).map(e => `<tr><td>${e[0]}</td><td>R${e[1].toFixed(2)}</td></tr>`).join('');
-        document.getElementById('catBreakdown').innerHTML = Object.entries(catData).sort((a,b)=>b[1]-a[1]).slice(0,5).map(e => `<tr><td>${e[0]}</td><td>R${e[1].toFixed(2)}</td></tr>`).join('');
 
-        // ANNUAL STATISTICS LOGIC
-        if(records.length > 0) {
-            let monthTotals = Array(12).fill(0).map(() => ({ in: 0, out: 0 }));
-            records.forEach(r => {
-                if(r.type === 'in') monthTotals[r.month].in += r.amount;
-                else monthTotals[r.month].out += r.amount;
-            });
+        const q = document.getElementById('searchInput').value.toLowerCase();
+        if(q) sorted = sorted.filter(r => r.supplier.toLowerCase().includes(q));
 
-            const activeMonths = monthTotals.filter(m => m.in > 0 || m.out > 0).length || 1;
-            const totalYearOut = monthTotals.reduce((s, m) => s + m.out, 0);
-            
-            // Best Month (Highest Surplus)
-            let bestVal = -Infinity; let bestMo = "None";
-            // Worst Month (Highest Spend)
-            let worstVal = 0; let worstMo = "None";
-
-            monthTotals.forEach((m, i) => {
-                let surplus = m.in - m.out;
-                if((m.in > 0 || m.out > 0) && surplus > bestVal) { bestVal = surplus; bestMo = months[i]; }
-                if(m.out > worstVal) { worstVal = m.out; worstMo = months[i]; }
-            });
-
-            document.getElementById('avgSpend').innerText = `R${(totalYearOut / activeMonths).toFixed(0)}`;
-            document.getElementById('bestMonth').innerText = bestMo;
-            document.getElementById('worstMonth').innerText = worstMo;
-            document.getElementById('yearTotal').innerText = `R${totalYearOut.toFixed(0)}`;
+        if(sorted.length === 0) {
+            container.innerHTML = `<div style="text-align:center; padding:20px; color:#94a3b8; font-size:12px;">No records for ${months[selM]} ${selY}.</div>`;
+            return;
         }
 
-        // History
-        const q = document.getElementById('searchInput').value.toLowerCase();
-        let hist = q ? records.filter(r => r.supplier.toLowerCase().includes(q) || r.category.toLowerCase().includes(q)) : [...records].sort((a,b)=>b.timestamp-a.timestamp).slice(0,8);
-        document.getElementById('historyTable').innerHTML = hist.map(r => `<tr><td>${r.day} ${months[r.month]}</td><td>${r.supplier}</td><td>R${r.amount.toFixed(2)}</td><td onclick="deleteRecord(${r.id})">🗑️</td></tr>`).join('');
-    }
-
-    // (OCR, CSV Export, and Resize functions remain the same as previous version)
-    function exportCSV() {
-        let csv = "Date,Type,Supplier,Category,Amount\n";
-        records.forEach(r => csv += `${r.day} ${months[r.month]},${r.type.toUpperCase()},${r.supplier},${r.category},${r.amount.toFixed(2)}\n`);
-        const blob = new Blob([csv], { type: 'text/csv' });
-        const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "Finance_Report.csv"; a.click();
-    }
-
-    document.getElementById('cameraInput').onchange = async (e) => {
-        const file = e.target.files[0]; if(!file) return;
-        const status = document.getElementById('ocrStatus');
-        status.innerText = "⌛ Scanning...";
-        const worker = await Tesseract.createWorker();
-        try {
-            await worker.loadLanguage('eng'); await worker.initialize('eng');
-            const { data: { text } } = await worker.recognize(file);
-            const m = text.match(/\d+[\.,]\d{2}/g);
-            if(m) document.getElementById('entryAmount').value = Math.max(...m.map(n=>parseFloat(n.replace(',','.'))));
-            sups.forEach(s => { if(text.toUpperCase().includes(s.toUpperCase())) document.getElementById('entrySupplier').value = s; });
-            status.innerText = "✅ Done"; await worker.terminate();
-        } catch (err) { status.innerText = "❌ Error"; await worker.terminate(); }
-    };
-
-    function deleteRecord(id) { if(confirm("Delete?")) { records = records.filter(r=>r.id!==id); localStorage.setItem('f_data', JSON.stringify(records)); renderApp(); } }
-
-    init();
-</script>
-</body>
-</html>
+        let currentSup = ""; 
+        let supTotal = 0
