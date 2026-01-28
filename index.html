@@ -20,4 +20,187 @@
         .summary-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px; }
         .s-card { padding: 12px; border-radius: 10px; background: #fff; border-left: 4px solid #cbd5e1; box-shadow: 0 2px 5px rgba(0,0,0,0.03); }
         .s-card b { display: block; font-size: 15px; }
-        .group-header { background: #f1f5f9; padding: 8px 12px; margin-top: 15px; border-radius: 6px; font-size: 11px; font-weight: bold; color: var(--accent); display: flex; justify-content: space-
+        .group-header { background: #f1f5f9; padding: 8px 12px; margin-top: 15px; border-radius: 6px; font-size: 11px; font-weight: bold; color: var(--accent); display: flex; justify-content: space-between; }
+        .mini-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+        .mini-table td { padding: 12px 5px; border-bottom: 1px solid #f1f5f9; }
+        .chip { display: inline-block; background: #e2e8f0; padding: 4px 8px; border-radius: 15px; font-size: 11px; margin: 2px; }
+        .chip span { margin-left: 6px; color: var(--out); font-weight: bold; }
+    </style>
+</head>
+<body>
+
+<div class="search-header">
+    <input type="text" id="searchInput" placeholder="🔍 Search Suppliers..." onkeyup="renderApp()">
+</div>
+
+<div class="card">
+    <div class="tab-group">
+        <button id="tabIn" class="tab-btn" onclick="setMode('in')">Money In</button>
+        <button id="tabOut" class="tab-btn active-out" onclick="setMode('out')">Money Out</button>
+    </div>
+
+    <div style="display:flex; gap:8px; margin-bottom:12px;">
+        <div style="flex:1"><label>Year</label><select id="entryYear" onchange="renderApp()"></select></div>
+        <div style="flex:1.5"><label>Month</label><select id="entryMonth" onchange="renderApp()"></select></div>
+        <div style="flex:1"><label>Day</label><select id="entryDay"></select></div>
+    </div>
+
+    <div class="card" id="scanField" style="padding:10px; border: 1px dashed #cbd5e1; box-shadow:none; margin-bottom:12px;">
+        <label>Scan Slip (OCR)</label>
+        <input type="file" id="cameraInput" accept="image/*">
+        <div id="ocrStatus" style="font-size:10px; font-weight:bold; color:var(--accent); margin-top:5px;">Ready</div>
+    </div>
+
+    <div style="margin-bottom:12px;">
+        <label>Amount (R)</label>
+        <input type="number" id="entryAmount" inputmode="decimal" placeholder="0.00">
+    </div>
+    
+    <div id="outFields" style="display:flex; gap:8px; margin-bottom:12px;">
+        <div style="flex:1"><label>Supplier</label><select id="entrySupplier"></select></div>
+        <div style="flex:1"><label>Category</label><select id="entryCategory"></select></div>
+    </div>
+    
+    <button class="btn-process" onclick="processEntry()">SAVE TRANSACTION</button>
+</div>
+
+<div class="summary-grid">
+    <div class="s-card" style="border-left-color: var(--in);"><span>In</span><b id="statIn">R0.00</b></div>
+    <div class="s-card" style="border-left-color: var(--out);"><span>Out</span><b id="statOut">R0.00</b></div>
+</div>
+
+<div id="historyContainer"></div>
+
+<div class="card" style="margin-top:30px; border-top: 4px solid var(--accent);">
+    <label>Manage Lists & Tools</label>
+    <div style="display:flex; gap:5px; margin-bottom:15px;">
+        <input type="text" id="newLabelName" placeholder="New name..." style="flex:2; padding:8px;">
+        <button onclick="addListItem('sups')" style="flex:1; background:var(--accent); color:white; border:none; border-radius:8px; font-size:10px;">+ SHOP</button>
+        <button onclick="addListItem('cats')" style="flex:1; background:var(--accent); color:white; border:none; border-radius:8px; font-size:10px;">+ CAT</button>
+    </div>
+    <div id="manageSups"></div><br>
+    <div id="manageCats"></div>
+    <hr style="border:0; border-top:1px solid #e2e8f0; margin:20px 0;">
+    <button onclick="exportCSV()" style="width:100%; background:#1e293b; color:white; padding:12px; border-radius:10px; border:none; font-weight:bold;">📥 DOWNLOAD EXCEL (CSV)</button>
+</div>
+
+<script>
+    let mode = 'out';
+    let records = JSON.parse(localStorage.getItem('f_data')) || [];
+    let cats = JSON.parse(localStorage.getItem('f_cats')) || ['Groceries', 'Petrol', 'Rent', 'Salary'];
+    let sups = JSON.parse(localStorage.getItem('f_sups')) || ['Checkers', 'Woolworths', 'Shell', 'Employer'];
+    const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+
+    function init() {
+        const yearSel = document.getElementById('entryYear');
+        for(let i = 2024; i <= 2027; i++) yearSel.innerHTML += `<option value="${i}">${i}</option>`;
+        yearSel.value = new Date().getFullYear();
+        document.getElementById('entryMonth').innerHTML = months.map((m,i)=>`<option value="${i}">${m}</option>`).join('');
+        document.getElementById('entryMonth').value = new Date().getMonth();
+        document.getElementById('entryDay').innerHTML = Array.from({length:31},(_,i)=>`<option value="${i+1}">${i+1}</option>`).join('');
+        document.getElementById('entryDay').value = new Date().getDate();
+        renderApp();
+    }
+
+    function setMode(m) {
+        mode = m;
+        document.getElementById('tabIn').className = m==='in' ? 'tab-btn active-in' : 'tab-btn';
+        document.getElementById('tabOut').className = m==='out' ? 'tab-btn active-out' : 'tab-btn';
+        document.getElementById('outFields').style.opacity = m==='out' ? '1' : '0.3';
+        document.getElementById('scanField').style.display = m==='out' ? 'block' : 'none';
+    }
+
+    function processEntry() {
+        const amt = parseFloat(document.getElementById('entryAmount').value);
+        if(!amt) return;
+        records.push({
+            id: Date.now(), type: mode,
+            year: parseInt(document.getElementById('entryYear').value),
+            month: parseInt(document.getElementById('entryMonth').value),
+            day: parseInt(document.getElementById('entryDay').value),
+            amount: amt,
+            supplier: mode === 'out' ? document.getElementById('entrySupplier').value : 'Income',
+            category: mode === 'out' ? document.getElementById('entryCategory').value : 'Salary'
+        });
+        localStorage.setItem('f_data', JSON.stringify(records));
+        document.getElementById('entryAmount').value = '';
+        renderApp();
+    }
+
+    function renderApp() {
+        document.getElementById('entryCategory').innerHTML = cats.map(c=>`<option>${c}</option>`).join('');
+        document.getElementById('entrySupplier').innerHTML = sups.map(s=>`<option>${s}</option>`).join('');
+        document.getElementById('manageSups').innerHTML = sups.map((s,i)=>`<span class="chip">${s}<span onclick="removeListItem('sups',${i})">×</span></span>`).join('');
+        document.getElementById('manageCats').innerHTML = cats.map((c,i)=>`<span class="chip">${c}<span onclick="removeListItem('cats',${i})">×</span></span>`).join('');
+
+        const selY = parseInt(document.getElementById('entryYear').value);
+        const selM = parseInt(document.getElementById('entryMonth').value);
+        const filtered = records.filter(r => r.year === selY && r.month === selM);
+        
+        document.getElementById('statIn').innerText = `R${filtered.filter(r=>r.type==='in').reduce((s,r)=>s+r.amount,0).toFixed(2)}`;
+        document.getElementById('statOut').innerText = `R${filtered.filter(r=>r.type==='out').reduce((s,r)=>s+r.amount,0).toFixed(2)}`;
+
+        const container = document.getElementById('historyContainer');
+        container.innerHTML = '';
+        let sorted = filtered.sort((a,b) => a.supplier.localeCompare(b.supplier) || a.day - b.day);
+        const q = document.getElementById('searchInput').value.toLowerCase();
+        if(q) sorted = sorted.filter(r => r.supplier.toLowerCase().includes(q));
+
+        let currentSup = ""; let supTotal = 0; let buffer = "";
+        sorted.forEach((r, i) => {
+            if(r.supplier !== currentSup) {
+                if(currentSup !== "") flush(currentSup, supTotal, buffer);
+                currentSup = r.supplier; supTotal = 0; buffer = "";
+            }
+            supTotal += r.amount;
+            buffer += `<tr><td>${r.day} ${months[r.month]}</td><td style="color:#64748b">${r.category}</td><td style="text-align:right; font-weight:bold; color:${r.type==='in'?'var(--in)':'var(--text)'}">R${r.amount.toFixed(2)}</td><td style="text-align:right" onclick="deleteRec(${r.id})">🗑️</td></tr>`;
+            if(i === sorted.length - 1) flush(currentSup, supTotal, buffer);
+        });
+    }
+
+    function flush(name, total, html) {
+        document.getElementById('historyContainer').innerHTML += `<div class="group-header"><span>${name.toUpperCase()}</span><span>R${total.toFixed(2)}</span></div><table class="mini-table">${html}</table>`;
+    }
+
+    function addListItem(type) {
+        const val = document.getElementById('newLabelName').value.trim();
+        if(!val) return;
+        if(type==='cats') cats.push(val); else sups.push(val);
+        localStorage.setItem('f_'+type, JSON.stringify(type==='cats'?cats:sups));
+        document.getElementById('newLabelName').value = ''; renderApp();
+    }
+
+    function removeListItem(type, i) {
+        if(type==='cats') cats.splice(i,1); else sups.splice(i,1);
+        localStorage.setItem('f_'+type, JSON.stringify(type==='cats'?cats:sups));
+        renderApp();
+    }
+
+    document.getElementById('cameraInput').onchange = async (e) => {
+        const file = e.target.files[0]; if(!file) return;
+        const status = document.getElementById('ocrStatus');
+        status.innerText = "⌛ Scanning...";
+        const worker = await Tesseract.createWorker();
+        try {
+            await worker.loadLanguage('eng'); await worker.initialize('eng');
+            const { data: { text } } = await worker.recognize(file);
+            const m = text.match(/\d+[\.,]\d{2}/g);
+            if(m) document.getElementById('entryAmount').value = Math.max(...m.map(n=>parseFloat(n.replace(',','.'))));
+            sups.forEach(s => { if(text.toUpperCase().includes(s.toUpperCase())) document.getElementById('entrySupplier').value = s; });
+            status.innerText = "✅ Done"; await worker.terminate();
+        } catch (err) { status.innerText = "❌ Failed"; await worker.terminate(); }
+    };
+
+    function exportCSV() {
+        let csv = "Date,Type,Supplier,Category,Amount\n";
+        records.forEach(r => csv += `${r.day} ${months[r.month]} ${r.year},${r.type},${r.supplier},${r.category},${r.amount}\n`);
+        const blob = new Blob([csv], { type: 'text/csv' });
+        const a = document.createElement("a"); a.href = URL.createObjectURL(blob); a.download = "Finance_Backup.csv"; a.click();
+    }
+
+    function deleteRec(id) { if(confirm("Delete?")) { records = records.filter(r=>r.id!==id); localStorage.setItem('f_data',JSON.stringify(records)); renderApp(); } }
+
+    init();
+</script>
+</body>
+</html>
